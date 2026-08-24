@@ -1,7 +1,7 @@
 package ui
 
-import com.intellij.openapi.diagnostic.Logger
 import com.intellij.util.concurrency.AppExecutorUtil
+import util.LOG
 import java.io.IOException
 import java.net.URL
 import java.util.concurrent.CompletableFuture
@@ -12,7 +12,6 @@ import javax.imageio.ImageIO
 import javax.swing.Icon
 
 class ImagesSource: MediaSource<Icon> {
-    private val log = Logger.getInstance("ImagesSource")
 
     //The key is String, not java.net.URL, because URL's hashCode() and equals() are blocking operations
     private val cachedImages: MutableMap<String /* url */, CompletableFuture<Icon>> = ConcurrentHashMap()
@@ -24,7 +23,7 @@ class ImagesSource: MediaSource<Icon> {
                 try {
                     ReviewerComponentFactory.createIconForPrParticipant(ImageIO.read(url))
                 } catch (e: IOException) {
-                    log.warn("Cannot read image by URL: $url")
+                    LOG.warn("Cannot read image by URL: $url")
                     ReviewerComponentFactory.defaultAvatarIcon
                 }
             }, executor)

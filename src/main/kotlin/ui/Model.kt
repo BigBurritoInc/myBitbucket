@@ -7,13 +7,12 @@ import bitbucket.data.PR
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.notification.Notifications
-import com.intellij.openapi.diagnostic.Logger
+import util.LOG
 import util.doInAppExecutor
 import util.invokeLater
 import java.util.function.Consumer
 
 object Model {
-    private val log = Logger.getInstance("Model")
     private val vcs: VCS = Git
     private var own: PRState = PRState()
     private var reviewing: PRState = PRState()
@@ -26,6 +25,7 @@ object Model {
 
     fun updateOwnPRs(prs: List<PR>) {
         synchronized(this) {
+            LOG.debug("Model.updateOwnPRs: ${prs.size} PR(s)")
             val diff = own.createDiff(prs)
             if (diff.hasAnyUpdates()) {
                 own = own.createNew(prs)
@@ -51,6 +51,7 @@ object Model {
 
     fun updateReviewingPRs(prs: List<PR>) {
         synchronized(this) {
+            LOG.debug("Model.updateReviewingPRs: ${prs.size} PR(s)")
             val diff = reviewing.createDiff(prs)
             if (diff.hasAnyUpdates()) {
                 notifyNewPR(diff)
@@ -100,7 +101,7 @@ object Model {
                 showNotification("PR ${pr.title} is approved")
                 invokeLater { callback.accept(true) }
             } catch (e: Exception) {
-                log.warn(e)
+                LOG.warn(e)
             }
         }
     }
@@ -115,7 +116,7 @@ object Model {
                     invokeLater { callback.accept(true) }
                 }
             } catch (e: Exception) {
-                log.warn(e)
+                LOG.warn(e)
             }
         }
     }

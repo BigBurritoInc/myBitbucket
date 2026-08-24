@@ -2,10 +2,10 @@ import bitbucket.BitbucketClient
 import bitbucket.BitbucketClientFactory
 import bitbucket.ClientListener
 import com.intellij.notification.NotificationType
-import com.intellij.openapi.diagnostic.Logger
 import com.intellij.util.concurrency.AppExecutorUtil
 import http.HttpResponseHandler
 import ui.Model
+import util.LOG
 import java.io.IOException
 import java.net.UnknownHostException
 import java.util.concurrent.ScheduledFuture
@@ -14,7 +14,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.net.ssl.SSLHandshakeException
 
 object UpdateTaskHolder {
-    private val log = Logger.getInstance(UpdateTaskHolder::class.java)
     private val lock = Object()
     var task: CancellableTask = DummyTask()
 
@@ -56,24 +55,24 @@ object UpdateTaskHolder {
 
         override fun run() {
             try {
-                log.debug("Running UpdateTask...")
-                Model.updateReviewingPRs(client.reviewedPRs())
+                LOG.debug("Running UpdateTask...")
+                val reviewingPRs = client.reviewedPRs()
+                Model.updateReviewingPRs(reviewingPRs)
                 val ownPRs = client.ownPRs()
+                LOG.debug("UpdateTask: fetched ${reviewingPRs.size} reviewing PR(s), ${ownPRs.size} own PR(s)")
                 //If user has too many open pull request, we will not retrieve merge status for every of them
                 ownPRs.subList(0, Math.min(ownPRs.size, 20)).forEach { it.mergeStatus = client.retrieveMergeStatus(it) }
                 Model.updateOwnPRs(ownPRs)
             } catch (e: HttpResponseHandler.UnauthorizedException) {
-                println("UnauthorizedException")
+                LOG.warn("UpdateTask stopped: unauthorized")
                 cancel()
             } catch (e: IOException) {
-                println("IOException: ${e.message}")
-                log.warn(e)
+                LOG.warn("UpdateTask: connection error", e)
                 Model.showNotification("Error while trying to connect to a remote host: ${e.message} \n" +
                         "Either myBitbucket settings are invalid or the host is unreachable",
                         NotificationType.WARNING)
             } catch (e: Exception) {
-                println("Error while trying to execute update task: ${e.message}")
-                log.warn(e)
+                LOG.warn("UpdateTask failed", e)
             }
         }
 
@@ -122,7 +121,7 @@ object UpdateTaskHolder {
         }
 
         override fun requestFailed(e: Exception) {
-            log.error("Request failed", e)
+            LOG.error("Request failed", e)
             val message = when (e) {
                 is UnknownHostException -> "BitBucket host can't be reached. Check url settings."
                 is SSLHandshakeException -> "SSL handshake with BitBucket server failed. Details: " + e.message
@@ -133,7 +132,7 @@ object UpdateTaskHolder {
             val errors = errorCounter.incrementAndGet()
             if (errors > 5) {
                 task.cancel()
-                log.warn("UpdateTask is cancelled due to the high request error rate")
+                LOG.warn("UpdateTask is cancelled due to the high request error rate")
             }
         }
     }

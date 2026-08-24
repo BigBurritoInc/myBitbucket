@@ -2,7 +2,6 @@ import com.intellij.ide.DataManager
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
@@ -18,15 +17,15 @@ import git4idea.branch.GitBrancher
 import git4idea.repo.GitRepository
 import git4idea.update.GitFetcher
 import org.jetbrains.annotations.Nls
+import util.LOG
 
 
 //todo: get rid of null-checks
 object Git: VCS {
-    private val log = Logger.getInstance("Git")
     private const val updateActionId = "Vcs.UpdateProject"
 
     override fun checkoutBranch(branch: String, listener: Runnable) {
-        println("Checking out $branch")
+        LOG.debug("Checking out $branch")
         val currentProject = currentProject()
         val currentRepository = currentRepository()
         if (currentProject != null && currentRepository != null) {
@@ -45,7 +44,7 @@ object Git: VCS {
             }
 
         } else {
-            log.warn("prj or repo is null $currentProject $currentRepository")
+            LOG.warn("prj or repo is null $currentProject $currentRepository")
         }
     }
 
@@ -56,7 +55,7 @@ object Git: VCS {
                     updateAction, ActionCommand.getInputEvent(updateActionId), null,
                     ActionPlaces.UNKNOWN, false)
         } else {
-            log.warn("Cannot find action by id: $updateActionId")
+            LOG.warn("Cannot find action by id: $updateActionId")
         }
     }
 

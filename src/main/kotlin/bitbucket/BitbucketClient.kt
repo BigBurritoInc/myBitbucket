@@ -10,7 +10,6 @@ import bitbucket.httpparams.*
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectReader
 import com.fasterxml.jackson.databind.ObjectWriter
-import com.intellij.openapi.diagnostic.Logger
 import http.HttpResponseHandler
 import http.RequestFactory
 import http.UrlBuilder
@@ -18,6 +17,7 @@ import org.apache.http.client.HttpClient
 import org.apache.http.client.methods.HttpUriRequest
 import org.apache.http.entity.ByteArrayEntity
 import ui.Settings
+import util.LOG
 import java.net.URL
 
 class BitbucketClient(
@@ -28,7 +28,6 @@ class BitbucketClient(
         private val objWriter: ObjectWriter,
         private val listener: ClientListener
     ) {
-    private val log = Logger.getInstance("BitbucketClient")
     private val mergeStatusResponseHandler = HttpResponseHandler(
             objReader, object : TypeReference<MergeStatus>() {}, listener)
     private val pagedResponseHandler = HttpResponseHandler(
@@ -49,7 +48,7 @@ class BitbucketClient(
         try {
             val urlBuilder = urlBuilder().pathSegments(
                     "projects", settings.project, "repos", settings.slug, "pull-requests", pr.id.toString(), "participants", settings.login)
-            println(urlBuilder.toUrlString())
+            LOG.debug("Approving PR ${pr.id}: PUT ${urlBuilder.toUrlString()}")
             val request = httpRequestFactory.createPut(urlBuilder.toUrlString())
             val body = objWriter.writeValueAsBytes(Approve(SimpleUser(settings.login)))
             val entity = ByteArrayEntity(body)
@@ -64,6 +63,7 @@ class BitbucketClient(
     fun merge(pr: PR): PR {
         return try {
             val urlBuilder = mergeUrl(pr)
+            LOG.debug("Merging PR ${pr.id}: POST ${urlBuilder.toUrlString()}")
             val request = httpRequestFactory.createPost(urlBuilder.toUrlString())
             sendRequest(request, pullRequestResponseHandler)
         } catch (e: Exception) {
@@ -82,7 +82,24 @@ class BitbucketClient(
             applyParameters(urlBuilder, role, start, limit)
 
             val request = httpRequestFactory.createGet(urlBuilder.toUrlString())
-            filterByProject(replayPageRequest(request) { inbox(role, limit, Start(it)) })
+            LOG.debug("Requesting inbox PRs: role=$role, start=$start, url=${urlBuilder.toUrlString()}")
+            val received = replayPageRequest(request) { inbox(role, limit, Start(it)) }
+            val filtered = filterByProject(received)
+            LOG.debug("Inbox PRs for role=$role: received ${received.size}, ${filtered.size} match " +
+                    "configured project='${settings.project}' repo='${settings.slug}'")
+            // The inbox endpoint returns PRs across the whole BitBucket instance; filterByProject then
+            // silently drops anything outside the one project/repo configured in Settings. If that
+            // filter empties out an otherwise non-empty response, it's almost certainly a
+            // project/repository setting typo rather than an actual absence of PRs, and there is no
+            // exception to report it any other way — so it's called out at WARN (always logged, no
+            // need to enable debug logging first).
+            if (received.isNotEmpty() && filtered.isEmpty()) {
+                LOG.warn("All ${received.size} inbox PR(s) for role=$role were filtered out: none matched " +
+                        "the configured project ('${settings.project}') / repository ('${settings.slug}'). " +
+                        "PRs were found in: ${received.map { "${it.projectKey}/${it.repoSlug}" }.distinct()}. " +
+                        "Check Settings if this is unexpected.")
+            }
+            filtered
         } catch (e: Exception) {
             listener.requestFailed(e)
             emptyList()
@@ -142,7 +159,9 @@ class BitbucketClient(
                 prs.addAll(replay.invoke(pagedResponse.nextPageStart))
             return prs
         } catch (e: HttpResponseHandler.UnauthorizedException) {
-            log.info(e)
+            // Already surfaced to the user as a notification via listener.invalidCredentials()
+            // (see HttpResponseHandler); this is just the diagnostic trail.
+            LOG.debug("Request unauthorized", e)
         }
         return emptyList()
     }
