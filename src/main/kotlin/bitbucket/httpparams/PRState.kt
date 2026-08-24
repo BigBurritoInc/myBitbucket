@@ -1,6 +1,6 @@
 package bitbucket.httpparams
 
-import com.palominolabs.http.url.UrlBuilder
+import http.UrlBuilder
 
 enum class PRState(private val paramValue: String): HttpRequestParameter {
     ALL("all"),

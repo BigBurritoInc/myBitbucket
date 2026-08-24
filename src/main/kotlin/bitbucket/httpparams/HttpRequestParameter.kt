@@ -1,6 +1,6 @@
 package bitbucket.httpparams
 
-import com.palominolabs.http.url.UrlBuilder
+import http.UrlBuilder
 
 interface HttpRequestParameter {
     fun apply(urlBuilder: UrlBuilder)

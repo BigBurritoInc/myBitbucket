@@ -1,6 +1,6 @@
 package bitbucket.httpparams
 
-import com.palominolabs.http.url.UrlBuilder
+import http.UrlBuilder
 
 enum class PROrder(private val paramValue: String): HttpRequestParameter {
     NEWEST("newest"),

@@ -77,9 +77,7 @@ class BitbucketHelperConfigurable : SearchableConfigurable, Configurable.NoScrol
 
     override fun createComponent(): JComponent? {
         val project = CommonDataKeys.PROJECT.getData(DataManager.getInstance().getDataContext()) ?: return JLabel("Empty project!")
-        val storer = ServiceManager.getService<Storer>(project, Storer::class.java)
-        if (storer != null)
-            settings = storer.settings
+        settings = project.service<Storer>().settings
 
         val mainPanel = JPanel(GridBagLayout())
         val gbc = GridBagConstraints()
@@ -178,6 +176,5 @@ class Storer : PersistentStateComponent<Settings> {
 }
 
 fun getStorerService(): Storer =
-        ServiceManager.getService<Storer>(CommonDataKeys.PROJECT.getData(DataManager.getInstance().getDataContext())!!,
-        Storer::class.java)
+        CommonDataKeys.PROJECT.getData(DataManager.getInstance().getDataContext())!!.service<Storer>()
 

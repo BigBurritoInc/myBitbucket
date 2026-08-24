@@ -6,6 +6,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.guessProjectDir
 import com.intellij.openapi.ui.playback.commands.ActionCommand
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.vcsUtil.VcsUtil
@@ -79,7 +80,7 @@ object Git: VCS {
 
     fun gitVcs(): GitVcs? {
         val prj = currentProject()
-        val baseDir = prj?.baseDir
+        val baseDir = prj?.guessProjectDir()
         if (prj != null && baseDir != null) {
             val vcs = VcsUtil.getVcsFor(prj, baseDir)
             //Initial problem: git4idea.GitVcs cannot be cast to git4idea.GitVcs
@@ -92,16 +93,20 @@ object Git: VCS {
     }
 }
 
-internal class AsyncFetchAndCheckout(project: Project?, @Nls title: String, var gitRoots: List<VirtualFile>,
-                                     var repo: GitRepository?, var branch: String, var listener: Runnable) :
+// Constructor takes a non-null Project/GitRepository (both call sites already null-checked them)
+// rather than relying on the base Task class's @Nullable `myProject` field, which is what was
+// actually rejected below once the Kotlin compiler started enforcing that platform nullability
+// annotation strictly.
+internal class AsyncFetchAndCheckout(private val project: Project, @Nls title: String, var gitRoots: List<VirtualFile>,
+                                     var repo: GitRepository, var branch: String, var listener: Runnable) :
         Task.Backgroundable(project, title) {
 
     override fun run(indicator: ProgressIndicator) {
-        val repositoryManager = GitUtil.getRepositoryManager(myProject)
-        GitFetcher(myProject, indicator, true).fetchRootsAndNotify(GitUtil.getRepositoriesFromRoots(repositoryManager,
+        val repositoryManager = GitUtil.getRepositoryManager(project)
+        GitFetcher(project, indicator, true).fetchRootsAndNotify(GitUtil.getRepositoriesFromRoots(repositoryManager,
                 gitRoots), null, true)
 
-        val branchController = GitBrancher.getInstance(myProject)
+        val branchController = GitBrancher.getInstance(project)
         branchController.checkout(branch, false, listOf(repo)) { listener.run() }
     }
 }

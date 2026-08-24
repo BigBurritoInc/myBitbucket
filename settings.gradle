@@ -1,2 +1,36 @@
-rootProject.name = 'BitbucketHelper4Idea'
+import org.gradle.api.initialization.resolve.RepositoriesMode
 
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+plugins {
+    // The IntelliJ Platform Gradle Plugin 2.x ships a companion settings-level plugin. Applying
+    // it alone isn't enough — it must be paired with the dependencyResolutionManagement block
+    // below, which registers the JetBrains platform repository's component metadata rules.
+    //
+    // Pinned to 2.18.1, not our earlier 2.5.0: 2.5.0 has a confirmed upstream regression
+    // resolving newer platform versions (JetBrains/intellij-platform-gradle-plugin#1931 — same
+    // "LocalIvyArtifactPathComponentMetadataRule will not be registered" / bogus coordinate
+    // symptom we kept hitting, there against CLion 2025.1, here against IC 2025.3). 2.18.1 is
+    // JetBrains' current documented version as of writing and requires Gradle 9+ / JDK 17+,
+    // which is why the Gradle wrapper was bumped to 9.7.1 in the same change.
+    id 'org.jetbrains.intellij.platform.settings' version '2.18.1'
+}
+
+dependencyResolutionManagement {
+    // Repositories are centralized here rather than in build.gradle; project-level repositories{}
+    // blocks are rejected once this is set, so build.gradle intentionally has none.
+    repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
+    repositories {
+        mavenCentral()
+        intellijPlatform {
+            defaultRepositories()
+        }
+    }
+}
+
+rootProject.name = 'BitbucketHelper4Idea'

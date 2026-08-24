@@ -1,6 +1,6 @@
 package bitbucket.httpparams
 
-import com.palominolabs.http.url.UrlBuilder
+import http.UrlBuilder
 
 open class Start(private val index: Int): HttpRequestParameter {
     override fun apply(urlBuilder: UrlBuilder) {

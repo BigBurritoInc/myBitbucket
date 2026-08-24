@@ -1,6 +1,6 @@
 package bitbucket.httpparams
 
-import com.palominolabs.http.url.UrlBuilder
+import http.UrlBuilder
 
 enum class Role(private val paramValue: String): HttpRequestParameter {
     REVIEWER("reviewer"),

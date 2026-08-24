@@ -8,7 +8,6 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.panels.VerticalLayout
 import com.intellij.ui.content.Content
 import com.intellij.ui.content.ContentManager
-import com.intellij.ui.content.impl.TabbedContentImpl
 import ui.*
 import util.invokeLater
 import java.awt.*
@@ -20,11 +19,13 @@ import javax.swing.*
 class MainWindow : ToolWindowFactory, DumbAware {
 
     private var window: ToolWindow? = null
-    private var loginContent: Content = createDummyContent()
-    private var reviewingContent: Content = createDummyContent()
-    private var ownContent: Content = createDummyContent()
 
-    private fun createDummyContent() = TabbedContentImpl(JLabel(), "", false, "")
+    // These are always assigned in createToolWindowContent() before anything else in this
+    // class can observe them, so lateinit is safe and avoids constructing a throwaway Content
+    // via an internal, unstable platform class (see git history for why that broke).
+    private lateinit var loginContent: Content
+    private lateinit var reviewingContent: Content
+    private lateinit var ownContent: Content
 
     override fun createToolWindowContent(prj: Project, window: ToolWindow) {
         this.window = window

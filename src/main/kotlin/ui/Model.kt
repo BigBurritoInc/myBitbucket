@@ -4,8 +4,7 @@ import Git
 import VCS
 import bitbucket.BitbucketClientFactory
 import bitbucket.data.PR
-import com.intellij.notification.NotificationDisplayType
-import com.intellij.notification.NotificationGroup
+import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.notification.Notifications
 import com.intellij.openapi.diagnostic.Logger
@@ -19,8 +18,11 @@ object Model {
     private var own: PRState = PRState()
     private var reviewing: PRState = PRState()
     private val listeners: MutableList<Listener> = ArrayList()
-    val notificationGroup = NotificationGroup("MyBitbucket group",
-            NotificationDisplayType.BALLOON, true)
+
+    // The group is now declared in plugin.xml (<notificationGroup id="MyBitbucket group" .../>);
+    // constructing it in code is deprecated in favor of that registration.
+    private val notificationGroup
+        get() = NotificationGroupManager.getInstance().getNotificationGroup("MyBitbucket group")
 
     fun updateOwnPRs(prs: List<PR>) {
         synchronized(this) {

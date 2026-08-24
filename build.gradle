@@ -1,38 +1,84 @@
 plugins {
-    id 'org.jetbrains.intellij' version '0.3.5'
-    id 'org.jetbrains.kotlin.jvm' version '1.3.11'
+    // Kotlin Gradle Plugin 1.9.24 predates Gradle 9 by a lot and hits internal task-configuration
+    // API mismatches under it ("DefaultTaskCollection#configureEach... cannot be executed in the
+    // current context", surfacing via the checkKotlinGradlePluginConfigurationErrors task).
+    // Gradle 9.7.x is tested against Kotlin 2.0.0+; 2.1.20 is a solid, well-established GA release
+    // comfortably inside that range (not reaching for Gradle 9.7's own bleeding-edge embedded
+    // 2.4.x line, which was still Beta as of the compatibility docs).
+    id 'org.jetbrains.kotlin.jvm' version '2.1.20'
+    // Gradle IntelliJ Plugin 1.x cannot build against IntelliJ Platform 2024.2+ (JetBrains
+    // hard-blocks it with a verifyPluginConfiguration error) — this project now uses its
+    // successor, the IntelliJ Platform Gradle Plugin 2.x. Version is deliberately NOT repeated
+    // here: settings.gradle's 'org.jetbrains.intellij.platform.settings' plugin already puts
+    // this plugin on the build classpath at a pinned version, and redeclaring a version for it
+    // here makes Gradle refuse to apply it ("already on the classpath with an unknown version").
+    // Bump the version in settings.gradle if you need a newer one.
+    id 'org.jetbrains.intellij.platform'
 }
 
 group 'BigBurritoInc'
-version '0.4'
+version '0.5'
 
-repositories {
-    mavenCentral()
-    jcenter()
-}
+// Repositories now live in settings.gradle's dependencyResolutionManagement block (required
+// alongside FAIL_ON_PROJECT_REPOS there) — a repositories{} block here would be rejected.
 
 dependencies {
-    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
-    compile 'com.palominolabs.http:url-builder:1.1.1'
-    compile "com.fasterxml.jackson.core:jackson-databind:2.6.5"
-    compile "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.6.5"
+    intellijPlatform {
+        // A pinned, downloadable SDK instead of a local IDE install: every contributor (Mac,
+        // Windows, Linux, CI) builds against identical platform jars, so there's nothing
+        // machine-specific to configure.
+        //
+        // This doesn't need to match your installed IDE's version — the code only depends on
+        // stable public APIs (available since ~2020.3), which the platform keeps binary-compatible
+        // going forward, so a plugin built against 2025.2 runs fine on 2026.2.
+        //
+        // Pinned to 2025.2, not 2025.3: IntelliJ IDEA Community's maven-metadata.xml still lists
+        // "2025.3" as a version, but JetBrains folded Community and Ultimate into one unified
+        // distribution starting there, and the standalone IC download artifact that
+        // create('IC', ...) needs no longer exists for it ("Couldn't resolve
+        // IntellijIdeaCommunity download URL for version: '2025.3'"). 2025.2 is the last version
+        // on the old per-edition distribution model. If this ever stops resolving, any other
+        // pre-2025.3 20XX.X release works just as well.
+        create 'IC', '2025.2'
+        bundledPlugin 'Git4Idea'
+        // instrumentationTools() was removed in later 2.x releases — the plugin wires up
+        // bytecode instrumentation automatically now, no explicit dependency needed.
+    }
+
+    // com.palominolabs.http:url-builder was dropped: it was only ever published to
+    // JCenter/Bintray, which has been shut down since 2022, so it can no longer be resolved
+    // from anywhere. Replaced by http.UrlBuilder, a small in-repo equivalent.
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.2'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2'
 }
 
-compileKotlin {
-    kotlinOptions.jvmTarget = "1.8"
+// Recent IntelliJ Platform versions require bytecode targeting Java 17 specifically, not
+// whatever JDK happens to run Gradle (21 here). Setting java{sourceCompatibility/targetCompatibility}
+// plus kotlin{compilerOptions{jvmTarget}} separately still let compileJava resolve to the running
+// JDK (21) while compileKotlin stayed at 17 — Gradle's JVM-target validation compares their
+// toolchains, not those legacy compatibility fields. kotlin.jvmToolchain() is the fix Kotlin's own
+// docs recommend for this exact mismatch: it sets one JVM toolchain that both the Kotlin and Java
+// compile tasks pick up, so they can't disagree.
+kotlin {
+    jvmToolchain(17)
 }
-compileTestKotlin {
-    kotlinOptions.jvmTarget = "1.8"
-}
-intellij {
-    version '2018.3'
-    plugins 'git4idea'
-    pluginName 'myBitbucket'
-    alternativeIdePath 'C:\\Program Files\\JetBrains\\IntelliJ IDEA Community Edition 2018.2.6'
-    updateSinceUntilBuild false
-}
-patchPluginXml {
-    changeNotes """
-      v.0.4 Fixed parsing error when user email is empty
-    """
+
+intellijPlatform {
+    pluginConfiguration {
+        name = 'myBitbucket'
+        version = project.version.toString()
+        ideaVersion {
+            sinceBuild = '233'
+            untilBuild = null
+        }
+        changeNotes = """
+          v.0.5 Fixed a startup crash ("Cannot create class MainWindow" /
+          NoSuchMethodError on TabbedContentImpl) on recent IntelliJ IDEA builds, caused
+          by using an internal, unstable platform class to build placeholder toolwindow
+          content. Also migrated off several long-deprecated APIs (ServiceManager,
+          Project#baseDir, the NotificationGroup constructor), replaced a dependency
+          (url-builder) that JCenter's shutdown made unresolvable, and moved the Gradle
+          build onto the IntelliJ Platform Gradle Plugin 2.x.
+        """
+    }
 }

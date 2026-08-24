@@ -11,9 +11,9 @@ import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectReader
 import com.fasterxml.jackson.databind.ObjectWriter
 import com.intellij.openapi.diagnostic.Logger
-import com.palominolabs.http.url.UrlBuilder
 import http.HttpResponseHandler
 import http.RequestFactory
+import http.UrlBuilder
 import org.apache.http.client.HttpClient
 import org.apache.http.client.methods.HttpUriRequest
 import org.apache.http.entity.ByteArrayEntity

@@ -11,7 +11,7 @@
     or email to bitbucket.plugin@gmail.com
     </p>
     ]]></description>
-    <idea-version since-build="145.0"/>
+    <idea-version since-build="223.0"/>
     <depends>com.intellij.modules.lang</depends>
     <depends>Git4Idea</depends>
 
@@ -25,6 +25,7 @@
                                  displayName="myBitbucket"/>
         <projectService serviceInterface="ui.Storer"
                         serviceImplementation="ui.Storer"/>
+        <notificationGroup id="MyBitbucket group" displayType="BALLOON"/>
     </extensions>
 
 
