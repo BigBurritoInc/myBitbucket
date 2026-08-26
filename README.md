@@ -5,7 +5,7 @@ This plugin for IntelliJ IDEA lets you see, approve and merge your Bitbucket Ser
 ## Configuring the plugin
 To configure the plugin open Idea's Settings window, navigate to the **myBitbucket** section and paste a link to your repository (or to any pull request in it) into the Repository URL field — the base url, project and repository name are parsed out of it automatically.
 
-The plugin authenticates using an **Access Token** (requires Bitbucket Server 5.5 or higher). To generate one from within Bitbucket Server go to _Manage account > Account settings > Personal access tokens_. Create a token with **Write** permission to be able to approve and merge pull requests from the plugin. Paste it into the Access Token field and hit OK — the plugin should now show your pull requests.
+The plugin authenticates using an **Access Token** (requires Bitbucket Server 5.5 or higher). To generate one from within Bitbucket Server go to _Manage account > Account settings > HTTP access tokens_. Create a token with **Write** permission to be able to approve and merge pull requests from the plugin. Paste it into the Access Token field and hit OK — the plugin should now show your pull requests.
 
 ## Dependencies
 Requires “Git Integration” plugin to be enabled to use Git checkout.
