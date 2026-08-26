@@ -174,7 +174,7 @@ open class PRComponent(val pr: PR) : JPanel() {
     private fun createPrLinkLabel(pr: PR): LinkLabel<*> {
         val prLinkLabel = LinkLabel.create(pr.title) { BrowserUtil.browse(pr.links.getSelfHref()) }
         prLinkLabel.font = prLinkLabel.font.deriveFont(prLinkLabel.font.size * 1.2f)
-        prLinkLabel.toolTipText = "<html>${pr.title}<br>link: ${pr.links.getSelfHref()}<br><br>Open in browser</html>"
+        prLinkLabel.toolTipText = "<html>${pr.links.getSelfHref()}</html>"
         return prLinkLabel
     }
 
