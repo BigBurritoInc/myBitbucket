@@ -2,6 +2,8 @@
 
 This plugin for IntelliJ IDEA lets you see, approve and merge your Bitbucket Server pull requests without leaving the IDE. It's integrated with Git so you can checkout the corresponding branch straight from a pull request card.
 
+![myBitbucket plugin showing a list of pull requests](src/main/resources/myBitbucket_example01.png)
+
 ## Configuring the plugin
 To configure the plugin open Idea's Settings window, navigate to the **myBitbucket** section and paste a link to your repository (or to any pull request in it) into the Repository URL field — the base url, project and repository name are parsed out of it automatically.
 
