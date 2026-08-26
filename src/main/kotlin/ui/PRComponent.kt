@@ -5,6 +5,7 @@ import bitbucket.data.PRParticipant
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.ui.JBPopupMenu
+import com.intellij.ui.Gray
 import com.intellij.ui.JBColor
 import com.intellij.ui.SeparatorComponent
 import com.intellij.ui.components.JBLabel
@@ -201,7 +202,10 @@ open class PRComponent(val pr: PR) : JPanel() {
         pane.isOpaque = false
         pane.border = null
         // Pull theme colors from UIManager — Swing's HTML rendering defaults to black text.
-        val foreground = UIManager.getColor("Label.foreground") ?: Color.BLACK
+        // Label.foreground itself is too pale to read at this text size under some light themes
+        // (e.g. Islands Light) — Gray._30 is a standard IntelliJ Platform gray, dark enough to
+        // read without going full black. Dark themes are untouched: still Label.foreground.
+        val foreground = if (JBColor.isBright()) Gray._30 else UIManager.getColor("Label.foreground") ?: Color.BLACK
         val font = UIManager.getFont("Label.font")
         val colorHex = String.format("#%02x%02x%02x", foreground.red, foreground.green, foreground.blue)
         val fontFamily = font?.family ?: "sans-serif"

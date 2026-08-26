@@ -29,6 +29,9 @@
 
 
     <actions>
-        <!-- Add your actions here -->
+        <!-- Not added to any menu/toolbar group — reachable only via Find Action, on purpose.
+             See CLAUDE.md "Demo mode". -->
+        <action id="myBitbucket.ToggleDemoData" class="ui.DemoModeAction" text="myBitbucket: Show Demo Pull Requests"
+                description="Fill the pull request list with fake sample data for screenshots (no real data shown)."/>
     </actions>
 </idea-plugin>

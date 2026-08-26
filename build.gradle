@@ -6,7 +6,7 @@ plugins {
 
 group 'BigBurritoInc'
 // Bump on every change intended for reinstall (0.7 -> 0.7.1 -> ...) — see CLAUDE.md "Versioning".
-version '0.8.20'
+version '0.8.21'
 
 dependencies {
     intellijPlatform {

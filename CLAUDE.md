@@ -152,6 +152,13 @@ external fallback either, since these are internal company email addresses. Who 
 requested changes on a PR is still shown, via `ReviewerComponentFactory.getStatusIcon()`'s overlay
 mark on each reviewer's icon.
 
+## Demo mode
+
+`DemoModeAction` (registered in plugin.xml, not added to any menu/toolbar) fills the Reviewing tab
+with 5 fake pull requests from `DemoData.kt` — for taking screenshots without a real server or any
+real PR/user data. Invoke via Find Action (Cmd/Ctrl+Shift+A), search "myBitbucket" or "demo";
+invoking it again switches back to real data (`DemoMode.kt`).
+
 ## Basic Auth
 
 Access Token is the only auth method exposed in the Settings UI (`ui/Configurable.kt`) and the
