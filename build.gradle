@@ -1,67 +1,65 @@
 plugins {
-    // Kotlin Gradle Plugin 1.9.24 predates Gradle 9 by a lot and hits internal task-configuration
-    // API mismatches under it ("DefaultTaskCollection#configureEach... cannot be executed in the
-    // current context", surfacing via the checkKotlinGradlePluginConfigurationErrors task).
-    // Gradle 9.7.x is tested against Kotlin 2.0.0+; 2.1.20 is a solid, well-established GA release
-    // comfortably inside that range (not reaching for Gradle 9.7's own bleeding-edge embedded
-    // 2.4.x line, which was still Beta as of the compatibility docs).
     id 'org.jetbrains.kotlin.jvm' version '2.1.20'
-    // Gradle IntelliJ Plugin 1.x cannot build against IntelliJ Platform 2024.2+ (JetBrains
-    // hard-blocks it with a verifyPluginConfiguration error) — this project now uses its
-    // successor, the IntelliJ Platform Gradle Plugin 2.x. Version is deliberately NOT repeated
-    // here: settings.gradle's 'org.jetbrains.intellij.platform.settings' plugin already puts
-    // this plugin on the build classpath at a pinned version, and redeclaring a version for it
-    // here makes Gradle refuse to apply it ("already on the classpath with an unknown version").
-    // Bump the version in settings.gradle if you need a newer one.
+    // Version pinned in settings.gradle, not here — see CLAUDE.md "Build".
     id 'org.jetbrains.intellij.platform'
 }
 
 group 'BigBurritoInc'
-// Bump this on every change you intend to reinstall: IntelliJ's "Install Plugin from Disk" treats
-// an unchanged id+version as already installed and can skip replacing the files, which is why the
-// pre-fix build kept running after every one of the fixes below despite rebuilding.
-version '0.6'
-
-// Repositories now live in settings.gradle's dependencyResolutionManagement block (required
-// alongside FAIL_ON_PROJECT_REPOS there) — a repositories{} block here would be rejected.
+// Bump on every change intended for reinstall (0.7 -> 0.7.1 -> ...) — see CLAUDE.md "Versioning".
+version '0.8.20'
 
 dependencies {
     intellijPlatform {
-        // A pinned, downloadable SDK instead of a local IDE install: every contributor (Mac,
-        // Windows, Linux, CI) builds against identical platform jars, so there's nothing
-        // machine-specific to configure.
-        //
-        // This doesn't need to match your installed IDE's version — the code only depends on
-        // stable public APIs (available since ~2020.3), which the platform keeps binary-compatible
-        // going forward, so a plugin built against 2025.2 runs fine on 2026.2.
-        //
-        // Pinned to 2025.2, not 2025.3: IntelliJ IDEA Community's maven-metadata.xml still lists
-        // "2025.3" as a version, but JetBrains folded Community and Ultimate into one unified
-        // distribution starting there, and the standalone IC download artifact that
-        // create('IC', ...) needs no longer exists for it ("Couldn't resolve
-        // IntellijIdeaCommunity download URL for version: '2025.3'"). 2025.2 is the last version
-        // on the old per-edition distribution model. If this ever stops resolving, any other
-        // pre-2025.3 20XX.X release works just as well.
+        // Pinned SDK, not a local IDE install — see CLAUDE.md "Build" for why 2025.2.
         create 'IC', '2025.2'
         bundledPlugin 'Git4Idea'
-        // instrumentationTools() was removed in later 2.x releases — the plugin wires up
-        // bytecode instrumentation automatically now, no explicit dependency needed.
     }
 
-    // com.palominolabs.http:url-builder was dropped: it was only ever published to
-    // JCenter/Bintray, which has been shut down since 2022, so it can no longer be resolved
-    // from anywhere. Replaced by http.UrlBuilder, a small in-repo equivalent.
+    // Replaces com.palominolabs.http:url-builder (JCenter shutdown) — see http.UrlBuilder.
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.2'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2'
+
+    testImplementation 'org.jetbrains.kotlin:kotlin-test-junit:2.1.20'
+    testImplementation 'junit:junit:4.13.2'
 }
 
-// Recent IntelliJ Platform versions require bytecode targeting Java 17 specifically, not
-// whatever JDK happens to run Gradle (21 here). Setting java{sourceCompatibility/targetCompatibility}
-// plus kotlin{compilerOptions{jvmTarget}} separately still let compileJava resolve to the running
-// JDK (21) while compileKotlin stayed at 17 — Gradle's JVM-target validation compares their
-// toolchains, not those legacy compatibility fields. kotlin.jvmToolchain() is the fix Kotlin's own
-// docs recommend for this exact mismatch: it sets one JVM toolchain that both the Kotlin and Java
-// compile tasks pick up, so they can't disagree.
+// Puts the platform SDK on test runtime classpath too, not just compile — required for
+// PanelRunner.kt to run standalone. See CLAUDE.md "PanelRunner".
+sourceSets {
+    test {
+        runtimeClasspath += sourceSets.main.compileClasspath
+    }
+}
+
+// --add-opens for PanelRunner.kt (JDK 17+ module system) — see CLAUDE.md "PanelRunner".
+tasks.withType(JavaExec).configureEach {
+    jvmArgs += [
+            '--add-opens=java.base/java.lang=ALL-UNNAMED',
+            '--add-opens=java.base/java.lang.reflect=ALL-UNNAMED',
+            '--add-opens=java.base/java.util=ALL-UNNAMED',
+            '--add-opens=java.base/java.util.concurrent=ALL-UNNAMED',
+            '--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED',
+            '--add-opens=java.base/java.text=ALL-UNNAMED',
+            '--add-opens=java.base/java.nio=ALL-UNNAMED',
+            '--add-opens=java.base/java.nio.charset=ALL-UNNAMED',
+            '--add-opens=java.desktop/java.awt=ALL-UNNAMED',
+            '--add-opens=java.desktop/java.awt.event=ALL-UNNAMED',
+            '--add-opens=java.desktop/java.awt.image=ALL-UNNAMED',
+            '--add-opens=java.desktop/java.awt.font=ALL-UNNAMED',
+            '--add-opens=java.desktop/javax.swing=ALL-UNNAMED',
+            '--add-opens=java.desktop/javax.swing.plaf.basic=ALL-UNNAMED',
+            '--add-opens=java.desktop/javax.swing.text=ALL-UNNAMED',
+            '--add-opens=java.desktop/javax.swing.text.html=ALL-UNNAMED',
+            '--add-opens=java.desktop/sun.awt=ALL-UNNAMED',
+            '--add-opens=java.desktop/sun.font=ALL-UNNAMED',
+            '--add-opens=java.desktop/sun.java2d=ALL-UNNAMED',
+            '--add-opens=java.desktop/sun.swing=ALL-UNNAMED',
+            '--add-opens=java.desktop/sun.lwawt=ALL-UNNAMED',
+            '--add-opens=java.desktop/sun.lwawt.macosx=ALL-UNNAMED',
+    ]
+}
+
+// Platform requires Java 17 bytecode regardless of the JDK running Gradle.
 kotlin {
     jvmToolchain(17)
 }
@@ -75,17 +73,19 @@ intellijPlatform {
             untilBuild = null
         }
         changeNotes = """
-          v0.6 Diagnostic logging added for the BitBucket request pipeline (see util.LOG /
-          "myBitbucket" log category), including a warning when the inbox response is
-          non-empty but the project/repo filter drops everything. Also fixed a real
-          compile-time nullability bug in Git.kt (AsyncFetchAndCheckout).<br><br>
-          v0.5 Fixed a startup crash ("Cannot create class MainWindow" /
-          NoSuchMethodError on TabbedContentImpl) on recent IntelliJ IDEA builds, caused
-          by using an internal, unstable platform class to build placeholder toolwindow
-          content. Also migrated off several long-deprecated APIs (ServiceManager,
-          Project#baseDir, the NotificationGroup constructor), replaced a dependency
-          (url-builder) that JCenter's shutdown made unresolvable, and moved the Gradle
-          build onto the IntelliJ Platform Gradle Plugin 2.x.
+          v0.8.16 Fixed the pull request list sometimes failing to load with more than one
+          IntelliJ project window open.<br><br>
+          v0.8.13 Checking out a branch outside the plugin now updates the highlighted PR
+          immediately, instead of after a short delay.<br><br>
+          v0.8.7 Fixed "Checkout" failing on branches not already fetched locally.<br><br>
+          v0.8 Added a pull request description view — expand a PR to read its full description
+          in place.<br><br>
+          v0.7.3 Fixed a startup crash.<br><br>
+          v0.7.2 Settings now asks for a single "Repository URL" instead of three separate
+          fields, with Access Token as the only way to sign in.<br><br>
+          v0.7 Modernized the look and feel: redesigned Settings page, theme-aware colors and
+          icons in the pull request list.<br><br>
+          v0.5 Fixed a startup crash on newer IntelliJ IDEA versions.
         """
     }
 }

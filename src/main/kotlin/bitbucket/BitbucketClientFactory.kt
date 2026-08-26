@@ -4,32 +4,38 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import http.AccessTokenRequestFactory
 import http.BasicAuthRequestFactory
+import http.RequestFactory
 import org.apache.http.client.HttpClient
 import org.apache.http.impl.client.HttpClients
+import ui.Storer
 import ui.getStorerService
 
 object BitbucketClientFactory {
 
     var password: CharArray = kotlin.CharArray(0)
-    private val storer = getStorerService()
+
+    // Computed, not a stored val: platform forbids requesting a service from a class initializer.
+    private val storer: Storer
+        get() = getStorerService()
 
     fun createClient(listener: ClientListener = object : ClientListener {}): BitbucketClient {
         val objectMapper = ObjectMapper()
         objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+        return BitbucketClient(
+                createHttpClient(),
+                createRequestFactory(),
+                storer.settings, objectMapper.reader(), objectMapper.writer(), listener)
+    }
+
+    fun createRequestFactory(): RequestFactory {
         val settings = storer.settings
-        val requestFactory = if (settings.useAccessTokenAuth) {
+        return if (settings.useAccessTokenAuth) {
             AccessTokenRequestFactory(settings.accessToken)
         } else {
             BasicAuthRequestFactory(settings.login, String(password))
         }
-        return BitbucketClient(
-                createHttpClient(),
-                requestFactory,
-                settings, objectMapper.reader(), objectMapper.writer(), listener)
     }
 
-    private fun createHttpClient(): HttpClient {
-        // Using system "client" allows us reuse standard Idea SSLContext and TrustManager
-        return HttpClients.createSystem()
-    }
+    // "System" client reuses the IDE's own SSLContext/TrustManager.
+    fun createHttpClient(): HttpClient = HttpClients.createSystem()
 }

@@ -2,53 +2,75 @@ package ui
 
 import bitbucket.data.PR
 import bitbucket.data.PRParticipant
+import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.ui.JBPopupMenu
+import com.intellij.ui.JBColor
+import com.intellij.ui.SeparatorComponent
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.labels.LinkLabel
 import com.intellij.ui.components.panels.HorizontalLayout
+import com.intellij.util.ui.EmptyIcon
+import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import java.awt.*
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
-import java.net.URL
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 import java.util.*
-import java.util.concurrent.Executor
 import java.util.function.Consumer
 import javax.swing.*
+import javax.swing.event.HyperlinkEvent
 
 
-open class PRComponent(
-        val pr: PR,
-        imagesSource: MediaSource<Icon>,
-        awtExecutor: Executor) : JPanel() {
+open class PRComponent(val pr: PR) : JPanel() {
 
-    val greenColor = Color(89, 168, 105)
+    val greenColor: Color = JBColor.GREEN
 
-    private val checkoutBtn = JButton("▼ Checkout")
-    val approveBtn = JButton("Approve")
-    val mergeBtn = JButton("Merge")
+    private val checkoutBtn = JButton("Checkout", AllIcons.Vcs.Branch)
+    val approveBtn = JButton("Approve", AllIcons.General.InspectionsOK)
+    val mergeBtn = JButton("Merge", AllIcons.Vcs.Merge)
     private val prLink: JLabel
     private val targetBranchLabel: JLabel
     private val authorLabel: JBLabel
     private val reviewersPanel: ReviewersPanel
 
+    private val descriptionPane: JEditorPane? =
+            if (pr.description.isNotBlank()) createDescriptionPane(pr.description) else null
+    // Description wrapped with a thin rule above and below, so it reads as its own block.
+    private val descriptionBlock: JPanel? = this.descriptionPane?.let { pane ->
+        JPanel(BorderLayout(0, TOP_BOTTOM_INSET / 2)).apply {
+            isOpaque = false
+            add(descriptionSeparator(), BorderLayout.NORTH)
+            add(pane, BorderLayout.CENTER)
+            add(descriptionSeparator(), BorderLayout.SOUTH)
+        }
+    }
+    // JLabel, not JButton: button chrome padding fights the GridBagLayout insets below. Always
+    // present (blank icon when there's no description) so column 0's width never depends on
+    // whether a given PR has a description — see createExpandToggleLabel().
+    private val expandToggleLabel: JLabel = createExpandToggleLabel()
+    private var expanded = false
+    private var onToggleExpand: (() -> Unit)? = null
+    // GridBagConstraints for the description row; added/removed on toggle rather than hidden.
+    private lateinit var descriptionGbc: GridBagConstraints
+
     companion object {
-        const val LEFT_RIGHT_INSET = 7
-        const val TOP_BOTTOM_INSET = 10
+        private val LEFT_RIGHT_INSET = JBUI.scale(7)
+        private val TOP_BOTTOM_INSET = JBUI.scale(10)
+        private val CHEVRON_INSET = JBUI.scale(1)
+        private const val TOTAL_COLUMNS = 4
     }
 
     init {
         this.prLink = this.createPrLinkLabel(this.pr)
-        this.targetBranchLabel = JBLabel("To: ${this.pr.toBranch}")
-        val dateTimeFormatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM)
-        val updatedAt = this.pr.updatedAt.toLocalDateTime().format(dateTimeFormatter)
+        this.targetBranchLabel = JBLabel(this.pr.toBranch, AllIcons.Vcs.Arrow_right, SwingConstants.LEFT)
+        val updatedAt = friendlyTimeAgo(this.pr.updatedAt)
         val commentsCount = "${this.pr.commentCount} " + if (this.pr.commentCount == 1) { "comment" } else { "comments" }
-        this.authorLabel = JBLabel("By: ${this.pr.author.user.displayName} - #${this.pr.id} ($commentsCount) "
-                                 + "last updated $updatedAt")
-        this.reviewersPanel = ReviewersPanel(ArrayList(this.pr.reviewers), imagesSource, awtExecutor)
+        // <nobr> stops the HTML label from wrapping "ago" onto its own line.
+        this.authorLabel = JBLabel("<html><nobr><b>${escapeHtml(this.pr.author.user.displayName)}</b> "
+                                 + "($commentsCount) last updated $updatedAt</nobr></html>",
+                                 AllIcons.Vcs.Author, SwingConstants.LEFT)
+        this.reviewersPanel = ReviewersPanel(ArrayList(this.pr.reviewers))
         this.mergeBtn.isVisible = false
         this.approveBtn.isVisible = false
 
@@ -65,21 +87,44 @@ open class PRComponent(
         gbc.insets.top = TOP_BOTTOM_INSET
         gbc.insets.bottom = TOP_BOTTOM_INSET / 2
 
+        // Row 0: chevron (col 0) + title (col 1..). CHEVRON_INSET on both sides keeps the
+        // left-edge-to-chevron gap equal to the chevron-to-title gap.
         gbc.gridx = 0
         gbc.gridy = 0
-        gbc.gridwidth = 4
+        gbc.gridwidth = 1
+        gbc.weightx = 0.0
+        gbc.anchor = GridBagConstraints.NORTHWEST
+        gbc.fill = GridBagConstraints.NONE
+        gbc.insets.left = CHEVRON_INSET
+        gbc.insets.right = CHEVRON_INSET
+        this.add(this.expandToggleLabel, gbc)
+
+        gbc.gridx = 1
+        gbc.gridwidth = TOTAL_COLUMNS - 1
         gbc.weightx = 1.0
         gbc.anchor = GridBagConstraints.WEST
         gbc.fill = GridBagConstraints.HORIZONTAL
-
+        gbc.insets.left = 0
         this.add(this.prLink, gbc)
+
+        gbc.gridx = 0
+        gbc.gridwidth = TOTAL_COLUMNS
         gbc.gridy++
         gbc.insets.top = 0
         gbc.insets.bottom = 0
+        gbc.insets.left = LEFT_RIGHT_INSET
+        gbc.insets.right = LEFT_RIGHT_INSET
 
-        this.add(this.targetBranchLabel, gbc)
+        // Row 1, under the title; setExpanded() adds/removes descriptionBlock here on demand.
+        this.descriptionGbc = gbc.clone() as GridBagConstraints
+        this.descriptionGbc.insets.top = TOP_BOTTOM_INSET / 2
+        this.descriptionGbc.insets.bottom = TOP_BOTTOM_INSET / 2
+        this.descriptionGbc.fill = GridBagConstraints.HORIZONTAL
+
         gbc.gridy++
         this.add(this.authorLabel, gbc)
+        gbc.gridy++
+        this.add(this.targetBranchLabel, gbc)
 
         gbc.weightx = 0.0
         gbc.gridwidth = 1
@@ -87,24 +132,90 @@ open class PRComponent(
         gbc.fill = GridBagConstraints.NONE
         gbc.insets.top = TOP_BOTTOM_INSET
         gbc.insets.bottom = TOP_BOTTOM_INSET
+        // Column 0 stays reserved for the chevron (never used here) so its width never depends
+        // on the button row. Checkout and approve share one cell — same position, same size —
+        // since exactly one of them is ever visible at a time (see currentBranchChanged()).
+        gbc.gridx = 1
+        this.approveBtn.preferredSize = this.checkoutBtn.preferredSize
         this.add(this.checkoutBtn, gbc)
-        gbc.gridx++
         this.add(this.approveBtn, gbc)
-        gbc.gridx++
+        gbc.gridx = 2
         gbc.anchor = GridBagConstraints.WEST
         this.add(this.mergeBtn, gbc)
 
-        gbc.gridx++
+        gbc.gridx = 3
         gbc.weightx = 1.0
         gbc.anchor = GridBagConstraints.EAST
         this.add(this.reviewersPanel, gbc)
     }
 
+    /** Registers the callback [Panel] uses to coordinate "only one PR expanded at a time". */
+    fun setOnToggleExpand(callback: () -> Unit) {
+        this.onToggleExpand = callback
+    }
+
+    /** Shows or hides this card's description row. No-op if there's no description or state is unchanged. */
+    fun setExpanded(expand: Boolean) {
+        val block = this.descriptionBlock ?: return
+        if (expand == this.expanded) return
+        this.expanded = expand
+        expandToggleLabel.icon = if (expand) AllIcons.General.ArrowDown else AllIcons.General.ArrowRight
+        expandToggleLabel.toolTipText = if (expand) "Hide description" else "Show description"
+        if (expand) {
+            this.add(block, this.descriptionGbc)
+        } else {
+            this.remove(block)
+        }
+        this.revalidate()
+        this.repaint()
+    }
+
     private fun createPrLinkLabel(pr: PR): LinkLabel<*> {
         val prLinkLabel = LinkLabel.create(pr.title) { BrowserUtil.browse(pr.links.getSelfHref()) }
-        prLinkLabel.font = prLinkLabel.font.deriveFont(prLinkLabel.font.size * 1.4f)
+        prLinkLabel.font = prLinkLabel.font.deriveFont(prLinkLabel.font.size * 1.2f)
         prLinkLabel.toolTipText = "<html>${pr.title}<br>link: ${pr.links.getSelfHref()}<br><br>Open in browser</html>"
         return prLinkLabel
+    }
+
+    private fun createExpandToggleLabel(): JLabel {
+        if (this.descriptionPane == null) return JLabel(EmptyIcon.create(AllIcons.General.ArrowRight))
+        val label = JLabel(AllIcons.General.ArrowRight)
+        label.toolTipText = "Show description"
+        label.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+        label.addMouseListener(object : MouseAdapter() {
+            // Read lazily, not captured: onToggleExpand is still null at construction time.
+            override fun mouseClicked(e: MouseEvent) {
+                this@PRComponent.onToggleExpand?.invoke()
+            }
+        })
+        return label
+    }
+
+    // One thin line colored like the card's border, instead of SeparatorComponent's default thicker highlight+shadow pair.
+    private fun descriptionSeparator(): SeparatorComponent = SeparatorComponent(0, UIUtil.getBoundsColor(), null)
+
+    private fun createDescriptionPane(description: String): JEditorPane {
+        val pane = WrappingHtmlPane()
+        pane.contentType = "text/html"
+        pane.isEditable = false
+        pane.isOpaque = false
+        pane.border = null
+        // Pull theme colors from UIManager — Swing's HTML rendering defaults to black text.
+        val foreground = UIManager.getColor("Label.foreground") ?: Color.BLACK
+        val font = UIManager.getFont("Label.font")
+        val colorHex = String.format("#%02x%02x%02x", foreground.red, foreground.green, foreground.blue)
+        val fontFamily = font?.family ?: "sans-serif"
+        val fontSize = font?.size ?: 12
+        pane.text = "<html><body style=\"font-family: '$fontFamily'; font-size: ${fontSize}pt; " +
+                "color: $colorHex; margin: 0;\">${markdownToHtml(description)}</body></html>"
+        pane.caretPosition = 0
+        pane.addHyperlinkListener { e ->
+            // e.getURL(), not e.url: "URL" being all-caps breaks Kotlin's synthetic-property mapping.
+            if (e.eventType == HyperlinkEvent.EventType.ACTIVATED) {
+                e.getURL()?.let { BrowserUtil.browse(it.toString()) }
+            }
+        }
+        return pane
     }
 
     open fun createComponentSpecificButton() {
@@ -130,11 +241,20 @@ open class PRComponent(
     }
 }
 
+// JEditorPane ignores the layout's assigned width when sizing itself. Forces a reflow at the
+// actual assigned width via the standard setSize()-then-getPreferredSize() trick.
+private class WrappingHtmlPane : JEditorPane() {
+    override fun getPreferredSize(): Dimension {
+        val availableWidth = width.takeIf { it > 0 }
+                ?: parent?.width?.takeIf { it > 0 }
+                ?: return super.getPreferredSize()
+        setSize(availableWidth, Short.MAX_VALUE.toInt())
+        return Dimension(availableWidth, super.getPreferredSize().height)
+    }
+}
+
 /** A pull-request where an author is yourself */
-class OwnPRComponent(ownPR: PR,
-                     imagesSource: MediaSource<Icon>,
-                     awtExecutor: Executor)
-    : PRComponent(ownPR, imagesSource, awtExecutor) {
+class OwnPRComponent(ownPR: PR) : PRComponent(ownPR) {
 
     override fun createComponentSpecificButton() {
         this.mergeBtn.isVisible = true
@@ -161,9 +281,7 @@ class OwnPRComponent(ownPR: PR,
     }
 }
 
-class ReviewersPanel(reviewers: MutableList<PRParticipant>,
-                     imagesSource: MediaSource<Icon>,
-                     awtExecutor: Executor) : JPanel(HorizontalLayout(5)) {
+class ReviewersPanel(reviewers: MutableList<PRParticipant>) : JPanel(HorizontalLayout(5)) {
     companion object {
         const val ALWAYS_DISPLAY_REVIEWERS_COUNT = 5
     }
@@ -203,16 +321,14 @@ class ReviewersPanel(reviewers: MutableList<PRParticipant>,
                 }
             })
         }
-
-        labels.forEach { prParticipant: PRParticipant, label: ReviewerItem ->
-            imagesSource.retrieve(URL(prParticipant.user.links.getIconHref()))
-                    .thenAcceptAsync(Consumer { icon -> label.setAvatar(icon) }, awtExecutor)
-        }
     }
 }
 
 class ReviewerItem(reviewer: PRParticipant) : JLayeredPane() {
-    private val avatarLabel: JLabel = JLabel(ReviewerComponentFactory.defaultAvatarIcon)
+    // Tooltip shows the name, since the icon itself is always the same generic avatar.
+    private val avatarLabel: JLabel = JLabel(ReviewerComponentFactory.defaultAvatarIcon).apply {
+        toolTipText = reviewer.user.displayName
+    }
 
     companion object {
         val AVATAR_Z_INDEX = Integer(0)
@@ -232,9 +348,5 @@ class ReviewerItem(reviewer: PRParticipant) : JLayeredPane() {
             statusLabel.setBounds(size - statusIconSize, 0, statusIconSize, statusIconSize)
             this.add(statusLabel, STATUS_ICON_Z_INDEX)
         }
-    }
-
-    fun setAvatar(icon: Icon) {
-        this.avatarLabel.icon = icon
     }
 }

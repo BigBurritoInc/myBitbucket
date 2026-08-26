@@ -1,21 +1,25 @@
 package ui
 
 import bitbucket.data.PR
-import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBScrollPane
-import java.util.concurrent.Executor
-import javax.swing.Icon
 import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.ScrollPaneConstants
 
-var imagesSource: MediaSource<Icon> = ImagesSource()
-var awtExecutor: Executor = Executor { command -> ApplicationManager.getApplication().invokeLater(command) }
+// The project this plugin's toolwindow was built for — see getStorerService() in Configurable.kt
+// for why callers should prefer this over any ambient/ProjectManager-guessed Project.
+lateinit var currentProject: Project
+
+// ::currentProject.isInitialized is only usable here — Kotlin only allows that check on a
+// lateinit var from the same file it's declared in (or the same class). getStorerService() in
+// Configurable.kt needs the check from another file, so it goes through this instead.
+fun currentProjectOrNull(): Project? = if (::currentProject.isInitialized) currentProject else null
 
 fun createReviewPanel(): Panel {
     return object : Panel() {
         override fun createPRComponent(pr: PR): PRComponent {
-            return PRComponent(pr, imagesSource, awtExecutor)
+            return PRComponent(pr)
         }
 
         override fun reviewedUpdated(diff: Diff) {
@@ -27,7 +31,7 @@ fun createReviewPanel(): Panel {
 fun createOwnPanel(): Panel {
     return object : Panel() {
         override fun createPRComponent(pr: PR): PRComponent {
-            return OwnPRComponent(pr, imagesSource, awtExecutor)
+            return OwnPRComponent(pr)
         }
 
         override fun ownUpdated(diff: Diff) {

@@ -28,6 +28,12 @@ class BitbucketClient(
         private val objWriter: ObjectWriter,
         private val listener: ClientListener
     ) {
+    companion object {
+        // Asking for a size is what makes Bitbucket add `avatarUrl` to every User it returns —
+        // see User.avatarHref(). 64 so the icon stays crisp when scaled down on a HiDPI display.
+        private const val AVATAR_SIZE = 64
+    }
+
     private val mergeStatusResponseHandler = HttpResponseHandler(
             objReader, object : TypeReference<MergeStatus>() {}, listener)
     private val pagedResponseHandler = HttpResponseHandler(
@@ -80,6 +86,7 @@ class BitbucketClient(
         return try {
             val urlBuilder = urlBuilder().pathSegments("inbox", "pull-requests")
             applyParameters(urlBuilder, role, start, limit)
+            urlBuilder.queryParam("avatarSize", AVATAR_SIZE.toString())
 
             val request = httpRequestFactory.createGet(urlBuilder.toUrlString())
             LOG.debug("Requesting inbox PRs: role=$role, start=$start, url=${urlBuilder.toUrlString()}")
@@ -87,12 +94,7 @@ class BitbucketClient(
             val filtered = filterByProject(received)
             LOG.debug("Inbox PRs for role=$role: received ${received.size}, ${filtered.size} match " +
                     "configured project='${settings.project}' repo='${settings.slug}'")
-            // The inbox endpoint returns PRs across the whole BitBucket instance; filterByProject then
-            // silently drops anything outside the one project/repo configured in Settings. If that
-            // filter empties out an otherwise non-empty response, it's almost certainly a
-            // project/repository setting typo rather than an actual absence of PRs, and there is no
-            // exception to report it any other way — so it's called out at WARN (always logged, no
-            // need to enable debug logging first).
+            // Empty after a non-empty filter usually means a project/repo setting typo.
             if (received.isNotEmpty() && filtered.isEmpty()) {
                 LOG.warn("All ${received.size} inbox PR(s) for role=$role were filtered out: none matched " +
                         "the configured project ('${settings.project}') / repository ('${settings.slug}'). " +

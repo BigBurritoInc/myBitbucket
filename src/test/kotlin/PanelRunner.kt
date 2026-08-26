@@ -1,39 +1,31 @@
 
 import bitbucket.data.*
+import com.intellij.ui.scale.JBUIScale
 import ui.*
-import java.net.URL
 import java.util.*
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.Executor
-import javax.swing.Icon
 import javax.swing.JFrame
-import javax.swing.SwingUtilities
+import javax.swing.JScrollPane
 import kotlin.collections.HashMap
 import kotlin.collections.HashSet
 
 object PanelRunner {
 
-    val br = "feature/TOSX-1980-it-is-a-feature-that-has-a-workitem-branch"
+    val br = "feature/PROJ-1980-it-is-a-feature-that-has-a-workitem-branch"
 
     @JvmStatic
     fun main(args: Array<String>) {
+        // Must precede any PRComponent construction — see CLAUDE.md "PanelRunner".
+        JBUIScale.setSystemScaleFactor(1f)
         val frame = JFrame()
-        awtExecutor = Executor { command -> SwingUtilities.invokeLater(command) }
-        imagesSource = object : MediaSource<Icon> {
-            override fun retrieve(url: URL): CompletableFuture<Icon> {
-                val future = CompletableFuture<Icon>()
-                future.complete(ReviewerComponentFactory.defaultAvatarIcon)
-                return future
-            }
-        }
         val panel = createReviewPanel()
         val map = HashMap<Long, PR>()
         for (i in 0..20) {
             map[i.toLong()] = createPR(i.toLong(), i % 10)
         }
         panel.dataUpdated(Diff(map, emptyMap(), emptyMap(), emptyMap()))
-        panel.currentBranchChanged("feature/TOSX-1980-it-is-a-feature-that-has-a-workitem-branch3")
-        frame.contentPane.add(wrapIntoJBScroll(panel))
+        panel.currentBranchChanged("feature/PROJ-1980-it-is-a-feature-that-has-a-workitem-branch3")
+        // Plain JScrollPane, not PanelFactory.wrapIntoJBScroll() — see CLAUDE.md "PanelRunner".
+        frame.contentPane.add(JScrollPane(panel))
 
         frame.pack()
         frame.defaultCloseOperation = JFrame.EXIT_ON_CLOSE
@@ -46,7 +38,7 @@ object PanelRunner {
             title += " more info"
 
 
-        var to = "feature/TOSX-1955-it-is-a-feature-that-has-a-story-branch"
+        var to = "feature/PROJ-1955-it-is-a-feature-that-has-a-story-branch"
 
         for (k in 0..id % 4)
             to += "8984"
@@ -73,7 +65,18 @@ object PanelRunner {
                 reviewers,
                 Date(System.currentTimeMillis()), Date(System.currentTimeMillis()),
                 props,
-                Links(listOf(Links.Link("https://developer.atlassian.com/bitbucket/api/2/reference/"))),0
+                Links(listOf(Links.Link("https://developer.atlassian.com/bitbucket/api/2/reference/"))), 0,
+                // Every third PR gets a description, to preview both card variants.
+                if (id % 3 == 0L) descriptionSample(id) else null
         )
     }
+
+    private fun descriptionSample(id: Long) = """
+        ## Summary
+        This fixes the retry logic in `RequestExecutor#$id` and updates the *timeout* handling.
+
+        - covers the flaky case from PROJ-1980
+        - adds a regression test
+        - see [the original report](https://example.com/issue/$id) for context
+    """.trimIndent()
 }

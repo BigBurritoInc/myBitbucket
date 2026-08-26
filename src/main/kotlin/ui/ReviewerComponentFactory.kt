@@ -2,35 +2,33 @@ package ui
 
 import bitbucket.data.PRParticipant
 import bitbucket.data.ParticipantStatus
+import com.intellij.icons.AllIcons
 import com.intellij.util.ui.JBImageIcon
+import com.intellij.util.ui.JBUI
 import java.awt.Image
 import java.awt.image.BufferedImage
 import javax.imageio.ImageIO
 import javax.swing.Icon
 
+// Reviewer/author pictures are always this bundled generic icon — not fetched per-user (see
+// CLAUDE.md "Avatars"). Who approved or requested changes is still shown, via getStatusIcon()'s
+// overlay mark.
 object ReviewerComponentFactory {
-    const val statusIconSize = 20
-    const val avatarSize = 30
+    val statusIconSize = JBUI.scale(20)
+    val avatarSize = JBUI.scale(24) // HiDPI-scaled, not a raw pixel value.
     private val defaultAvatar = scaleImage(resourceImage("avatar.png"), avatarSize)
 
     val defaultAvatarIcon = JBImageIcon(defaultAvatar)
-    private var needsWorkIcon = JBImageIcon(scaleImage(resourceImage("needs_work.png"), statusIconSize))
-    private var approvedIcon = JBImageIcon(scaleImage(resourceImage("approved.png"), statusIconSize))
 
     fun getStatusIcon(participant: PRParticipant): Icon? {
-        val status = participant.status
-        if (status == ParticipantStatus.NEEDS_WORK)
-            return needsWorkIcon
-        if (status == ParticipantStatus.APPROVED)
-            return approvedIcon
-        return null
+        return when (participant.status) {
+            ParticipantStatus.NEEDS_WORK -> AllIcons.General.BalloonWarning
+            ParticipantStatus.APPROVED -> AllIcons.General.InspectionsOK
+            else -> null
+        }
     }
 
-    private fun scaleImage(image: Image, size: Int) = image.getScaledInstance(size, size, BufferedImage.SCALE_DEFAULT)
+    private fun scaleImage(image: Image, size: Int) = image.getScaledInstance(size, size, BufferedImage.SCALE_SMOOTH)
 
     private fun resourceImage(relativePath: String) = scaleImage(ImageIO.read(javaClass.classLoader.getResource(relativePath)), avatarSize)
-
-    fun createIconForPrParticipant(image: BufferedImage): Icon {
-        return JBImageIcon(scaleImage(image, avatarSize))
-    }
 }

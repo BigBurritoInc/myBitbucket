@@ -1,4 +1,5 @@
 import bitbucket.BitbucketClientFactory
+import com.intellij.openapi.components.service
 import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
@@ -8,6 +9,8 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.panels.VerticalLayout
 import com.intellij.ui.content.Content
 import com.intellij.ui.content.ContentManager
+import git4idea.repo.GitRepository
+import git4idea.repo.GitRepositoryChangeListener
 import ui.*
 import util.invokeLater
 import java.awt.*
@@ -20,23 +23,20 @@ class MainWindow : ToolWindowFactory, DumbAware {
 
     private var window: ToolWindow? = null
 
-    // These are always assigned in createToolWindowContent() before anything else in this
-    // class can observe them, so lateinit is safe and avoids constructing a throwaway Content
-    // via an internal, unstable platform class (see git history for why that broke).
-    private lateinit var loginContent: Content
+    private lateinit var project: Project
     private lateinit var reviewingContent: Content
     private lateinit var ownContent: Content
 
     override fun createToolWindowContent(prj: Project, window: ToolWindow) {
+        this.project = prj
         this.window = window
+        currentProject = prj
         val cm = window.contentManager
         val reviewingPanel = createReviewPanel()
         val ownPanel = createOwnPanel()
 
         reviewingContent = addTab(cm, wrapIntoJBScroll(reviewingPanel), "Reviewing (0)")
         ownContent = addTab(cm, wrapIntoJBScroll(ownPanel), "Created (0)")
-        val loginPanel = createLoginPanel(cm, reviewingContent)
-        loginContent = addTab(cm, loginPanel, "Login")
 
         Model.addListener(object: Listener {
             override fun ownCountChanged(count: Int) {
@@ -47,25 +47,34 @@ class MainWindow : ToolWindowFactory, DumbAware {
                 reviewingContent.displayName = "Reviewing ($count)"
             }
         })
-        cm.setSelectedContent(loginContent)
+        cm.setSelectedContent(reviewingContent)
 
         Model.addListener(reviewingPanel)
         Model.addListener(ownPanel)
         runUpdateTaskLater()
+
+        // Re-highlight the checked-out PR as soon as the branch actually changes, instead of
+        // only on the next 15s poll — covers checkout from the IDE's own branch widget/terminal,
+        // not just the plugin's own Checkout button (which already calls Model.branchChanged()
+        // straight from its own callback).
+        prj.messageBus.connect(prj).subscribe(GitRepository.GIT_REPO_CHANGE,
+                GitRepositoryChangeListener { Model.branchChanged() })
     }
 
     private fun runUpdateTaskLater() {
-        //This piece of code has to be invoked after the MainWindow is constructed, so we use invokeLater
-        //(StorerService is not available at the moment of window's construction)
         invokeLater {
-            if (getStorerService().settings.useAccessTokenAuth) {
-                getStorerService().settings.validate()
-                window!!.contentManager.setSelectedContent(reviewingContent)
+            // Uses `project` directly, not getStorerService() — that helper's data-context
+            // lookup can still be null this early at startup.
+            val settings = project.service<Storer>().settings
+            if (settings.url.isNotBlank()) {
+                settings.validate()
                 UpdateTaskHolder.scheduleNew()
             }
         }
     }
 
+    // Unused — Basic Auth login UI is hidden from the tool window, kept for reference.
+    @Suppress("unused")
     private fun createLoginPanel(contentManager: ContentManager, reviewingContent: Content): JPanel {
         val wrapper = JPanel(BorderLayout())
         val passwordLabel = JBLabel("Password:")

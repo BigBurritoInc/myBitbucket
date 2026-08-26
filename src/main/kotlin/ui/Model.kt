@@ -128,7 +128,10 @@ object Model {
         }
     }
 
-    private fun branchChanged() {
+    // Public: also called directly by MainWindow's GitRepositoryChangeListener, so a branch
+    // switch made outside the plugin re-highlights immediately instead of waiting for the next
+    // 15s poll.
+    fun branchChanged() {
         invokeLater {
             listeners.forEach { it.currentBranchChanged(currentBranch()) }
         }

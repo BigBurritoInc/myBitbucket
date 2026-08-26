@@ -14,8 +14,8 @@ import git4idea.GitVcs
 import git4idea.actions.GitRepositoryAction
 import git4idea.branch.GitBranchUtil
 import git4idea.branch.GitBrancher
+import git4idea.fetch.GitFetchSupport
 import git4idea.repo.GitRepository
-import git4idea.update.GitFetcher
 import org.jetbrains.annotations.Nls
 import util.LOG
 
@@ -92,18 +92,15 @@ object Git: VCS {
     }
 }
 
-// Constructor takes a non-null Project/GitRepository (both call sites already null-checked them)
-// rather than relying on the base Task class's @Nullable `myProject` field, which is what was
-// actually rejected below once the Kotlin compiler started enforcing that platform nullability
-// annotation strictly.
 internal class AsyncFetchAndCheckout(private val project: Project, @Nls title: String, var gitRoots: List<VirtualFile>,
                                      var repo: GitRepository, var branch: String, var listener: Runnable) :
         Task.Backgroundable(project, title) {
 
     override fun run(indicator: ProgressIndicator) {
         val repositoryManager = GitUtil.getRepositoryManager(project)
-        GitFetcher(project, indicator, true).fetchRootsAndNotify(GitUtil.getRepositoriesFromRoots(repositoryManager,
-                gitRoots), null, true)
+        GitFetchSupport.fetchSupport(project)
+                .fetchAllRemotes(GitUtil.getRepositoriesFromRoots(repositoryManager, gitRoots))
+                .showNotification()
 
         val branchController = GitBrancher.getInstance(project)
         branchController.checkout(branch, false, listOf(repo)) { listener.run() }

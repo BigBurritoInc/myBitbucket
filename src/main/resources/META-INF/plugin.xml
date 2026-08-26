@@ -16,9 +16,8 @@
     <depends>Git4Idea</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <!-- todo: a pretty icon needed -->
         <toolWindow id="myBitbucket" anchor="right"
-                    icon="bitbucket-13.png" factoryClass="MainWindow">
+                    icon="bitbucket-bw.svg" factoryClass="MainWindow">
 
         </toolWindow>
         <applicationConfigurable groupId="root" groupWeight="1" instance="ui.BitbucketHelperConfigurable" id="preferences.BitbucketHelper4Idea"
