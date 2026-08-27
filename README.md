@@ -1,4 +1,6 @@
 # myBitbucket
+[![Downloads][plugin-downloads-svg]][plugin-repo]
+[![Version][plugin-version-svg]][plugin-repo]
 
 This plugin for IntelliJ IDEA lets you see, approve and merge your Bitbucket Server pull requests without leaving the IDE. It's integrated with Git so you can checkout the corresponding branch straight from a pull request card.
 
@@ -20,3 +22,7 @@ The plugin targets IntelliJ IDEA 2023.3 and newer, and is expected to work with 
 
 ## Reporting an issue
 If you find any issue, please report it to [GitHub](https://github.com/BigBurritoInc/BitbucketHelper4Idea/issues) or [email us](mailto:bitbucket.plugin@gmail.com)
+
+[plugin-repo]: https://plugins.jetbrains.com/plugin/11577-mybitbucket
+[plugin-downloads-svg]: http://img.shields.io/jetbrains/plugin/d/11577
+[plugin-version-svg]: https://img.shields.io/jetbrains/plugin/v/11577?label=version
