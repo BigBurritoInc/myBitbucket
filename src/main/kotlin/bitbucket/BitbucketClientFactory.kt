@@ -15,7 +15,7 @@ object BitbucketClientFactory {
 
     // Basic Auth's password field: shared across projects, unlike everything else here — left as
     // a global since Basic Auth itself is unreachable from the UI (see CLAUDE.md "Basic Auth").
-    var password: CharArray = kotlin.CharArray(0)
+    var password: CharArray = CharArray(0)
 
     fun createClient(project: Project, listener: ClientListener = object : ClientListener {}): BitbucketClient {
         val objectMapper = ObjectMapper()

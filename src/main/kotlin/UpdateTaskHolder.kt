@@ -30,7 +30,7 @@ class UpdateTaskHolder(private val project: Project) {
         const val MAX_DELAY_SECONDS = 120L
     }
 
-    private val lock = Object()
+    private val lock = Any()
     var task: CancellableTask = DummyTask()
 
     fun reschedule() {

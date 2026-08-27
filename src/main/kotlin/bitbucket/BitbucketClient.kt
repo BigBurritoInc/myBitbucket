@@ -73,6 +73,7 @@ class BitbucketClient(
                     "${partitioned.own.size} own, ${partitioned.reviewing.size} reviewing (user=$user)")
             partitioned
         } catch (e: HttpResponseHandler.NotFoundException) {
+            LOG.warn(e)
             listener.repositoryNotFound("Repository ${settings.project}/${settings.slug} was not found " +
                     "on ${settings.url} — check the repository URL in myBitbucket settings.")
             null

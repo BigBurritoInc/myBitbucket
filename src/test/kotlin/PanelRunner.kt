@@ -63,7 +63,7 @@ object PanelRunner {
                         User("UserName$userId", "username$userId@email.com", userId.toLong(), "FirstName$userId LastName$userId",
                                 Links(listOf(Links.Link("https://www.atlassian.com/software/bitbucket")))),
                         userId % 2 == 0,
-                        ParticipantStatus.values()[(userId % ParticipantStatus.values().size)]
+                        ParticipantStatus.entries[(userId % ParticipantStatus.entries.size)]
                 ))
             }
         }

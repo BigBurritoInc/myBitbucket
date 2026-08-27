@@ -62,7 +62,7 @@ open class PRComponent(val pr: PR, protected val actions: PRActions) : JPanel() 
     private var expanded = false
     private var onToggleExpand: (() -> Unit)? = null
     // GridBagConstraints for the description row; added/removed on toggle rather than hidden.
-    private lateinit var descriptionGbc: GridBagConstraints
+    private var descriptionGbc: GridBagConstraints
 
     companion object {
         private val LEFT_RIGHT_INSET = JBUI.scale(7)
