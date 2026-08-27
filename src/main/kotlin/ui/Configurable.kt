@@ -39,7 +39,7 @@ class BitbucketHelperConfigurable(private val project: Project) : SearchableConf
         val (baseUrl, projectKey, slug) = parseRepositoryUrl(repoUrlField.text)
                 ?: throw ConfigurationException(
                         "Paste a link to the repository or to a pull request in it, e.g. " +
-                                "https://bitbucket.example.com/projects/PROJECT/repos/repo-slug",
+                                "https://bitbucket.com/projects/PROJECT/repos/reposlug",
                         "Can't find a project/repository in that URL")
         formSettings.url = baseUrl
         formSettings.project = projectKey
