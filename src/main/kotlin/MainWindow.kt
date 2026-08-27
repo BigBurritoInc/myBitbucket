@@ -1,5 +1,4 @@
 import bitbucket.BitbucketClientFactory
-import com.intellij.openapi.components.service
 import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
@@ -30,15 +29,15 @@ class MainWindow : ToolWindowFactory, DumbAware {
     override fun createToolWindowContent(prj: Project, window: ToolWindow) {
         this.project = prj
         this.window = window
-        currentProject = prj
+        val model = prj.getService(Model::class.java)
         val cm = window.contentManager
-        val reviewingPanel = createReviewPanel()
-        val ownPanel = createOwnPanel()
+        val reviewingPanel = createReviewPanel(prj)
+        val ownPanel = createOwnPanel(prj)
 
         reviewingContent = addTab(cm, wrapIntoJBScroll(reviewingPanel), "Reviewing (0)")
         ownContent = addTab(cm, wrapIntoJBScroll(ownPanel), "Created (0)")
 
-        Model.addListener(object: Listener {
+        model.addListener(object: Listener {
             override fun ownCountChanged(count: Int) {
                 ownContent.displayName = "Created ($count)"
             }
@@ -49,26 +48,24 @@ class MainWindow : ToolWindowFactory, DumbAware {
         })
         cm.setSelectedContent(reviewingContent)
 
-        Model.addListener(reviewingPanel)
-        Model.addListener(ownPanel)
+        model.addListener(reviewingPanel)
+        model.addListener(ownPanel)
         runUpdateTaskLater()
 
         // Re-highlight the checked-out PR as soon as the branch actually changes, instead of
         // only on the next 15s poll — covers checkout from the IDE's own branch widget/terminal,
-        // not just the plugin's own Checkout button (which already calls Model.branchChanged()
+        // not just the plugin's own Checkout button (which already calls model.branchChanged()
         // straight from its own callback).
         prj.messageBus.connect(prj).subscribe(GitRepository.GIT_REPO_CHANGE,
-                GitRepositoryChangeListener { Model.branchChanged() })
+                GitRepositoryChangeListener { model.branchChanged() })
     }
 
     private fun runUpdateTaskLater() {
         invokeLater {
-            // Uses `project` directly, not getStorerService() — that helper's data-context
-            // lookup can still be null this early at startup.
-            val settings = project.service<Storer>().settings
+            val settings = project.getService(Storer::class.java)!!.settings
             if (settings.url.isNotBlank()) {
                 settings.validate()
-                UpdateTaskHolder.scheduleNew()
+                project.getService(UpdateTaskHolder::class.java).scheduleNew()
             }
         }
     }
@@ -85,9 +82,9 @@ class MainWindow : ToolWindowFactory, DumbAware {
         val listener = {
             try {
                 messageField.text = ""
-                getStorerService().settings.validate()
+                project.getService(Storer::class.java)!!.settings.validate()
                 BitbucketClientFactory.password = passwordField.password
-                UpdateTaskHolder.scheduleNew()
+                project.getService(UpdateTaskHolder::class.java).scheduleNew()
                 passwordField.text = ""
                 button.isEnabled = false
                 contentManager.setSelectedContent(reviewingContent)

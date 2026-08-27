@@ -6,7 +6,7 @@ plugins {
 
 group 'BigBurritoInc'
 // Bump on every change intended for reinstall (0.7 -> 0.7.1 -> ...) — see CLAUDE.md "Versioning".
-version '0.8.21'
+version '0.5.6'
 
 dependencies {
     intellijPlatform {
@@ -73,19 +73,16 @@ intellijPlatform {
             untilBuild = null
         }
         changeNotes = """
-          v0.8.16 Fixed the pull request list sometimes failing to load with more than one
-          IntelliJ project window open.<br><br>
-          v0.8.13 Checking out a branch outside the plugin now updates the highlighted PR
-          immediately, instead of after a short delay.<br><br>
-          v0.8.7 Fixed "Checkout" failing on branches not already fetched locally.<br><br>
-          v0.8 Added a pull request description view — expand a PR to read its full description
-          in place.<br><br>
-          v0.7.3 Fixed a startup crash.<br><br>
-          v0.7.2 Settings now asks for a single "Repository URL" instead of three separate
-          fields, with Access Token as the only way to sign in.<br><br>
-          v0.7 Modernized the look and feel: redesigned Settings page, theme-aware colors and
+          v0.5.6 The plugin now checks for updates more often when things are moving and backs off when
+          they are not, instead of polling on a fixed timer.<br><br>
+          v0.5.3 Settings, pull requests, and Checkout are now independent per project - opening
+          a second project window no longer shares them with the first.<br><br>
+          v0.5.1 Modernized the look and feel: redesigned Settings page, theme-aware colors and
           icons in the pull request list.<br><br>
-          v0.5 Fixed a startup crash on newer IntelliJ IDEA versions.
+          Settings now asks for a single "Repository URL" instead of three separate
+          fields, with Access Token as the only way to sign in.<br><br>
+          Added a pull request description view — expand a PR to read its full description
+          in place.<br><br>
         """
     }
 }

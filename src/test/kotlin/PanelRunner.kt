@@ -12,12 +12,24 @@ object PanelRunner {
 
     val br = "feature/PROJ-1980-it-is-a-feature-that-has-a-workitem-branch"
 
+    // Model is a per-project service and needs a real Project — PanelRunner has neither, so it
+    // skips PanelFactory.createReviewPanel() and builds its own Panel with a no-op stub instead.
+    // See CLAUDE.md "PanelRunner".
+    private val noopActions = object : PRActions {
+        override fun checkout(pr: PR) {}
+        override fun approve(pr: PR, callback: java.util.function.Consumer<Boolean>) {}
+        override fun merge(pr: PR, callback: java.util.function.Consumer<Boolean>) {}
+    }
+
     @JvmStatic
     fun main(args: Array<String>) {
         // Must precede any PRComponent construction — see CLAUDE.md "PanelRunner".
         JBUIScale.setSystemScaleFactor(1f)
         val frame = JFrame()
-        val panel = createReviewPanel()
+        val panel = object : Panel() {
+            override fun createPRComponent(pr: PR): PRComponent = PRComponent(pr, noopActions)
+            override fun reviewedUpdated(diff: Diff) = dataUpdated(diff)
+        }
         val map = HashMap<Long, PR>()
         for (i in 0..20) {
             map[i.toLong()] = createPR(i.toLong(), i % 10)

@@ -1,14 +1,10 @@
 package ui
 
-import com.intellij.ide.DataManager
-import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.*
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.options.SearchableConfigurable
-import com.intellij.openapi.project.ProjectManager
-import com.intellij.ui.components.JBLabel
+import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.*
@@ -18,8 +14,11 @@ import java.net.URL
 import javax.swing.JComponent
 
 
-/** Settings page. Basic Auth is hidden from this UI (see Settings.useAccessTokenAuth); Access Token is the only auth method exposed. */
-class BitbucketHelperConfigurable : SearchableConfigurable, Configurable.NoScroll {
+/** Settings page, one per project (registered as projectConfigurable — see plugin.xml) — each
+ * project has its own Repository URL/Access Token, no longer one shared page for the whole IDE.
+ * Basic Auth is hidden from this UI (see Settings.useAccessTokenAuth); Access Token is the only
+ * auth method exposed. */
+class BitbucketHelperConfigurable(private val project: Project) : SearchableConfigurable, Configurable.NoScroll {
     var settings: Settings = Settings()
 
     // Only copied into `settings` after validate() succeeds — never persist an invalid edit.
@@ -37,19 +36,19 @@ class BitbucketHelperConfigurable : SearchableConfigurable, Configurable.NoScrol
                     String(accessTokenField.password) != settings.accessToken
 
     override fun apply() {
-        val (baseUrl, project, slug) = parseRepositoryUrl(repoUrlField.text)
+        val (baseUrl, projectKey, slug) = parseRepositoryUrl(repoUrlField.text)
                 ?: throw ConfigurationException(
                         "Paste a link to the repository or to a pull request in it, e.g. " +
                                 "https://bitbucket.example.com/projects/PROJECT/repos/repo-slug",
                         "Can't find a project/repository in that URL")
         formSettings.url = baseUrl
-        formSettings.project = project
+        formSettings.project = projectKey
         formSettings.slug = slug
         formSettings.accessToken = String(accessTokenField.password)
         formSettings.useAccessTokenAuth = true
         formSettings.validate()
         settings.copyFrom(formSettings)
-        UpdateTaskHolder.scheduleNew()
+        project.getService(UpdateTaskHolder::class.java).scheduleNew()
     }
 
     override fun reset() {
@@ -59,14 +58,15 @@ class BitbucketHelperConfigurable : SearchableConfigurable, Configurable.NoScrol
     }
 
     override fun createComponent(): JComponent {
-        val project = CommonDataKeys.PROJECT.getData(DataManager.getInstance().getDataContext())
-                ?: return JBLabel("Empty project!")
-        settings = project.service<Storer>().settings
+        settings = project.getService(Storer::class.java)!!.settings
         formSettings = Settings().also { it.copyFrom(settings) }
         accessTokenField.text = settings.accessToken
         repoUrlField.text = reconstructRepositoryUrl(settings)
 
         return panel {
+            row {
+                text("You are editing myBitbucket settings for project \"${project.name}\".")
+            }
             row("Repository URL:") {
                 cell(repoUrlField).align(AlignX.FILL)
                         .comment("Paste a link to the repository, or to any pull request in it " +
@@ -138,20 +138,4 @@ class Storer : PersistentStateComponent<Settings> {
     override fun loadState(state: Settings) {
         XmlSerializerUtil.copyBean(state, settings)
     }
-}
-
-// Prefers `currentProject` (set once by MainWindow, unambiguous) over any ambient guess — the
-// DataManager/focused-component lookup below picks whichever project window currently has OS
-// focus, which is the wrong project whenever another IDE window is focused at the moment a
-// background poll fires (see CLAUDE.md "Known incidents" — this caused a MalformedURLException
-// from an unrelated project's blank Settings). DataManager.getDataContext() also asserts EDT and
-// throws off it, so it's only attempted there as a last resort before this project is set.
-fun getStorerService(): Storer {
-    currentProjectOrNull()?.let { return it.service<Storer>() }
-    val application = ApplicationManager.getApplication()
-    val project = (if (application.isDispatchThread)
-        CommonDataKeys.PROJECT.getData(DataManager.getInstance().getDataContext()) else null)
-            ?: ProjectManager.getInstance().openProjects.firstOrNull()
-            ?: throw IllegalStateException("myBitbucket: no open project found")
-    return project.service<Storer>()
 }

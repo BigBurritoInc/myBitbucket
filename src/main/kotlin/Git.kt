@@ -1,7 +1,5 @@
-import com.intellij.ide.DataManager
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
-import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
@@ -24,12 +22,14 @@ import util.LOG
 object Git: VCS {
     private const val updateActionId = "Vcs.UpdateProject"
 
-    override fun checkoutBranch(branch: String, listener: Runnable) {
+    // Every lookup below takes `project` explicitly instead of guessing it (ambient DataManager
+    // focus, ProjectManager.openProjects, etc.) — with more than one project window open, an
+    // ambient guess can resolve to the wrong one. See CLAUDE.md "Per-project state".
+    override fun checkoutBranch(project: Project, branch: String, listener: Runnable) {
         LOG.debug("Checking out $branch")
-        val currentProject = currentProject()
-        val currentRepository = currentRepository()
-        if (currentProject != null && currentRepository != null) {
-            val branchController = GitBrancher.getInstance(currentProject)
+        val currentRepository = currentRepository(project)
+        if (currentRepository != null) {
+            val branchController = GitBrancher.getInstance(project)
             val branchExists = currentRepository.branches.findBranchByName(branch) != null
             val repos = listOf(currentRepository)
             if (branchExists) {
@@ -38,13 +38,13 @@ object Git: VCS {
                     updateProject()
                 }
             } else {
-                AsyncFetchAndCheckout(currentProject, "MyBitbucket: Fetching", GitRepositoryAction.getGitRoots(
-                        currentProject, GitVcs.getInstance(currentProject))!!, currentRepository, branch, listener)
+                AsyncFetchAndCheckout(project, "MyBitbucket: Fetching", GitRepositoryAction.getGitRoots(
+                        project, GitVcs.getInstance(project))!!, currentRepository, branch, listener)
                         .queue()
             }
 
         } else {
-            LOG.warn("prj or repo is null $currentProject $currentRepository")
+            LOG.warn("repo is null for project ${project.name}")
         }
     }
 
@@ -59,29 +59,23 @@ object Git: VCS {
         }
     }
 
-    override fun currentBranch(): String {
-        val repository = currentRepository()
+    override fun currentBranch(project: Project): String {
+        val repository = currentRepository(project)
         if (repository != null)
             return GitBranchUtil.getDisplayableBranchText(repository)
         return ""
     }
 
-    fun currentProject(): Project? {
-        return CommonDataKeys.PROJECT.getData(DataManager.getInstance().dataContext)
-    }
-
-    fun currentRepository(): GitRepository? {
-        val prj = currentProject()
-        if (prj != null && gitVcs() != null)
-            return GitBranchUtil.getCurrentRepository(prj)
+    fun currentRepository(project: Project): GitRepository? {
+        if (gitVcs(project) != null)
+            return GitBranchUtil.getCurrentRepository(project)
         return null
     }
 
-    fun gitVcs(): GitVcs? {
-        val prj = currentProject()
-        val baseDir = prj?.guessProjectDir()
-        if (prj != null && baseDir != null) {
-            val vcs = VcsUtil.getVcsFor(prj, baseDir)
+    fun gitVcs(project: Project): GitVcs? {
+        val baseDir = project.guessProjectDir()
+        if (baseDir != null) {
+            val vcs = VcsUtil.getVcsFor(project, baseDir)
             //Initial problem: git4idea.GitVcs cannot be cast to git4idea.GitVcs
             //Lessons learned: do not add runtime dependencies for a module if it is a plugin.
             //Use plugin.xml to describe them

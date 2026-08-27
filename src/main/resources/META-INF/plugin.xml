@@ -20,8 +20,8 @@
                     icon="bitbucket-bw.svg" factoryClass="MainWindow">
 
         </toolWindow>
-        <applicationConfigurable groupId="root" groupWeight="1" instance="ui.BitbucketHelperConfigurable" id="preferences.BitbucketHelper4Idea"
-                                 displayName="myBitbucket"/>
+        <projectConfigurable groupId="root" groupWeight="1" instance="ui.BitbucketHelperConfigurable" id="preferences.BitbucketHelper4Idea"
+                             displayName="myBitbucket"/>
         <projectService serviceInterface="ui.Storer"
                         serviceImplementation="ui.Storer"/>
         <notificationGroup id="MyBitbucket group" displayType="BALLOON"/>

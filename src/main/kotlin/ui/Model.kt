@@ -7,12 +7,18 @@ import bitbucket.data.PR
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.notification.Notifications
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.project.Project
 import util.LOG
 import util.doInAppExecutor
 import util.invokeLater
 import java.util.function.Consumer
 
-object Model {
+// One instance per open project (light service, no plugin.xml registration needed) — each
+// project gets its own PR lists/listeners/polling, instead of every open project window sharing
+// one global PR list. See CLAUDE.md "Per-project state".
+@Service(Service.Level.PROJECT)
+class Model(private val project: Project) : PRActions {
     private val vcs: VCS = Git
     private var own: PRState = PRState()
     private var reviewing: PRState = PRState()
@@ -23,17 +29,22 @@ object Model {
     private val notificationGroup
         get() = NotificationGroupManager.getInstance().getNotificationGroup("MyBitbucket group")
 
-    fun updateOwnPRs(prs: List<PR>) {
+    /** @return whether anything actually changed — UpdateTask paces its next poll on this. */
+    fun updateOwnPRs(prs: List<PR>): Boolean {
+        var changed: Boolean
         synchronized(this) {
             LOG.debug("Model.updateOwnPRs: ${prs.size} PR(s)")
             val diff = own.createDiff(prs)
-            if (diff.hasAnyUpdates()) {
+            changed = diff.hasAnyUpdates()
+            if (changed) {
                 own = own.createNew(prs)
                 invokeLater { ownUpdated(diff); }
             }
+            if (diff.mergeStatusChanged.isNotEmpty()) changed = true
             notifyMergeStatusChanged(diff)
         }
         branchChanged()
+        return changed
     }
 
     private fun notifyMergeStatusChanged(diff: Diff) {
@@ -49,17 +60,21 @@ object Model {
         }
     }
 
-    fun updateReviewingPRs(prs: List<PR>) {
+    /** @return whether anything actually changed — UpdateTask paces its next poll on this. */
+    fun updateReviewingPRs(prs: List<PR>): Boolean {
+        var changed: Boolean
         synchronized(this) {
             LOG.debug("Model.updateReviewingPRs: ${prs.size} PR(s)")
             val diff = reviewing.createDiff(prs)
-            if (diff.hasAnyUpdates()) {
+            changed = diff.hasAnyUpdates()
+            if (changed) {
                 notifyNewPR(diff)
                 reviewing = reviewing.createNew(prs)
                 invokeLater { reviewingUpdated(diff) }
             }
         }
         branchChanged()
+        return changed
     }
 
     private fun notifyNewPR(diff: Diff) {
@@ -77,6 +92,8 @@ object Model {
     }
 
     private fun reviewingUpdated(diff: Diff) {
+        // Every pull request under review, including the already-approved ones the list collapses
+        // behind a button — the tab title answers "how many am I on", not "how many are left".
         listeners.forEach{
             it.reviewedUpdated(diff);
             it.reviewedCountChanged(reviewing.size())
@@ -90,33 +107,40 @@ object Model {
         }
     }
 
-    fun checkout(pr: PR) {
-        vcs.checkoutBranch(pr.fromBranch, Runnable { branchChanged() })
+    override fun checkout(pr: PR) {
+        vcs.checkoutBranch(project, pr.fromBranch, Runnable { branchChanged() })
     }
 
-    fun approve(pr: PR, callback: Consumer<Boolean>) {
+    override fun approve(pr: PR, callback: Consumer<Boolean>) {
         doInAppExecutor {
             try {
-                BitbucketClientFactory.createClient().approve(pr)
+                BitbucketClientFactory.createClient(project).approve(pr)
                 showNotification("PR ${pr.title} is approved")
+                // Poll straight away rather than waiting out the backoff — an approved PR drops out
+                // of the Reviewing list, and the user should see that happen now.
+                project.getService(UpdateTaskHolder::class.java).reschedule()
                 invokeLater { callback.accept(true) }
             } catch (e: Exception) {
-                LOG.warn(e)
+                LOG.warn("Failed to approve PR ${pr.id}", e)
+                // The client here is built without a listener, so nothing else would tell the user.
+                showNotification("Could not approve the pull request: ${pr.title}", NotificationType.WARNING)
             }
         }
     }
 
-    fun merge(pr: PR, callback: Consumer<Boolean>) {
+    override fun merge(pr: PR, callback: Consumer<Boolean>) {
         doInAppExecutor {
             try {
-                val newPRState = BitbucketClientFactory.createClient().merge(pr)
+                val newPRState = BitbucketClientFactory.createClient(project).merge(pr)
                 if (newPRState.closed) {
                     own = own.update(listOf(newPRState))
                     showNotification("PR ${pr.title} is merged")
+                    project.getService(UpdateTaskHolder::class.java).reschedule()
                     invokeLater { callback.accept(true) }
                 }
             } catch (e: Exception) {
-                LOG.warn(e)
+                LOG.warn("Failed to merge PR ${pr.id}", e)
+                showNotification("Could not merge the pull request: ${pr.title}", NotificationType.WARNING)
             }
         }
     }
@@ -124,7 +148,7 @@ object Model {
     fun showNotification(message: String, type: NotificationType = NotificationType.INFORMATION) {
         invokeLater {
             val notification = notificationGroup.createNotification(message, type)
-            Notifications.Bus.notify(notification, Git.currentProject())
+            Notifications.Bus.notify(notification, project)
         }
     }
 
@@ -138,7 +162,7 @@ object Model {
     }
 
     private fun currentBranch(): String {
-        return vcs.currentBranch()
+        return vcs.currentBranch(project)
     }
 
     fun addListener(listener: Listener) {

@@ -23,7 +23,16 @@ import javax.swing.*
 import javax.swing.event.HyperlinkEvent
 
 
-open class PRComponent(val pr: PR) : JPanel() {
+// What a PRComponent's Checkout/Approve/Merge buttons need. Model implements this; PanelRunner
+// stubs it with no-ops, since it runs standalone without a real project — see CLAUDE.md
+// "PanelRunner".
+interface PRActions {
+    fun checkout(pr: PR)
+    fun approve(pr: PR, callback: Consumer<Boolean>)
+    fun merge(pr: PR, callback: Consumer<Boolean>)
+}
+
+open class PRComponent(val pr: PR, protected val actions: PRActions) : JPanel() {
 
     val greenColor: Color = JBColor.GREEN
 
@@ -76,7 +85,7 @@ open class PRComponent(val pr: PR) : JPanel() {
         this.approveBtn.isVisible = false
 
         this.createComponentSpecificButton()
-        this.checkoutBtn.addActionListener { Model.checkout(this.pr) }
+        this.checkoutBtn.addActionListener { actions.checkout(this.pr) }
 
         this.border = UIUtil.getTextFieldBorder()
         this.background = UIUtil.getListBackground(false)
@@ -224,7 +233,7 @@ open class PRComponent(val pr: PR) : JPanel() {
 
     open fun createComponentSpecificButton() {
         this.approveBtn.addActionListener {
-            Model.approve(this.pr, Consumer { approved ->
+            actions.approve(this.pr, Consumer { approved ->
                 if (approved) {
                     this.approveBtn.text = "Approved"
                     this.approveBtn.isEnabled = false
@@ -258,7 +267,7 @@ private class WrappingHtmlPane : JEditorPane() {
 }
 
 /** A pull-request where an author is yourself */
-class OwnPRComponent(ownPR: PR) : PRComponent(ownPR) {
+class OwnPRComponent(ownPR: PR, actions: PRActions) : PRComponent(ownPR, actions) {
 
     override fun createComponentSpecificButton() {
         this.mergeBtn.isVisible = true
@@ -267,7 +276,7 @@ class OwnPRComponent(ownPR: PR) : PRComponent(ownPR) {
             this.mergeBtn.toolTipText = pr.mergeStatus.vetoesSummaries()
         } else {
             this.mergeBtn.addActionListener {
-                Model.merge(this.pr, Consumer { approved ->
+                actions.merge(this.pr, Consumer { approved ->
                     if (approved) {
                         this.mergeBtn.text = "Merged"
                         this.mergeBtn.isEnabled = false

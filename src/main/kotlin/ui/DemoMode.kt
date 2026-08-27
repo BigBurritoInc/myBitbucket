@@ -1,22 +1,29 @@
 package ui
 
-// Hidden feature, deliberately not a Settings toggle — see DemoModeAction and CLAUDE.md "Demo mode".
-object DemoMode {
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.project.Project
+
+// One instance per open project (light service), like Model/UpdateTaskHolder — a project's demo
+// PRs stay in that project's own window. See DemoModeAction and CLAUDE.md "Demo mode".
+@Service(Service.Level.PROJECT)
+class DemoMode(private val project: Project) {
     var enabled: Boolean = false
         private set
 
     fun enable() {
         enabled = true
-        UpdateTaskHolder.stop()
-        Model.updateOwnPRs(emptyList())
-        Model.updateReviewingPRs(DemoData.samplePRs())
+        project.getService(UpdateTaskHolder::class.java).stop()
+        val model = project.getService(Model::class.java)
+        model.updateOwnPRs(emptyList())
+        model.updateReviewingPRs(DemoData.samplePRs())
     }
 
     fun disable() {
         enabled = false
-        Model.updateReviewingPRs(emptyList())
+        project.getService(Model::class.java).updateReviewingPRs(emptyList())
         // Same guard MainWindow.runUpdateTaskLater() uses — don't restart polling into settings
         // that were never configured.
-        if (getStorerService().settings.url.isNotBlank()) UpdateTaskHolder.scheduleNew()
+        if (project.getService(Storer::class.java)!!.settings.url.isNotBlank())
+            project.getService(UpdateTaskHolder::class.java).scheduleNew()
     }
 }

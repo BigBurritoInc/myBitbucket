@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.Before
 import org.junit.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * Some tests to check PR deserialization from json
@@ -15,6 +17,7 @@ import kotlin.test.assertNotNull
 class ParseTest {
     private val objMapper = ObjectMapper()
     private val prTypeRef = object: TypeReference<PR>() { }
+    private val prPageTypeRef = object: TypeReference<PagedResponse<PR>>() { }
 
     @Before
     fun setUp() {
@@ -27,6 +30,20 @@ class ParseTest {
         val objectReader = objMapper.reader()
         val pr = objectReader.forType(prTypeRef).readValue<PR>(javaClass.getResourceAsStream("pr_sample.json"))
         assertNotNull(pr)
+    }
+
+    /**
+     * Bitbucket omits `nextPageStart` on the last page. PagedResponse declares it non-null, which is
+     * only safe because replayPageRequest checks isLastPage first — pin both here.
+     */
+    @Test
+    fun testParsePageOfPRs() {
+        val objectReader = objMapper.reader()
+        val page = objectReader.forType(prPageTypeRef)
+                .readValue<PagedResponse<PR>>(javaClass.getResourceAsStream("pr_page_sample.json"))
+        assertNotNull(page)
+        assertEquals(1, page.values.size)
+        assertTrue(page.isLastPage)
     }
 
     @Test

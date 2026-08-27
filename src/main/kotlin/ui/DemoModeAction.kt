@@ -10,11 +10,14 @@ class DemoModeAction : AnAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
     override fun update(e: AnActionEvent) {
-        e.presentation.text = if (DemoMode.enabled) "myBitbucket: Turn Off Demo Pull Requests"
+        e.presentation.isEnabledAndVisible = e.project != null
+        val enabled = e.project?.getService(DemoMode::class.java)?.enabled ?: false
+        e.presentation.text = if (enabled) "myBitbucket: Turn Off Demo Pull Requests"
         else "myBitbucket: Show Demo Pull Requests"
     }
 
     override fun actionPerformed(e: AnActionEvent) {
-        if (DemoMode.enabled) DemoMode.disable() else DemoMode.enable()
+        val demoMode = e.project?.getService(DemoMode::class.java) ?: return
+        if (demoMode.enabled) demoMode.disable() else demoMode.enable()
     }
 }

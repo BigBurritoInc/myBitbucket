@@ -36,9 +36,9 @@ class PRStateTest {
         assertEquals(1, diff.added.size)
         assertEquals(1, diff.updated.size)
         assertEquals(1, diff.removed.size)
-        assertEquals(pr3, diff.added[0])
-        assertEquals(pr1NewState, diff.updated[0])
-        assertEquals(pr2, diff.removed[0])
+        assertEquals(pr3, diff.added[3L])
+        assertEquals(pr1NewState, diff.updated[1L])
+        assertEquals(pr2, diff.removed[2L])
 
     }
 

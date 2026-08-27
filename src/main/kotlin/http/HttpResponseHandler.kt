@@ -37,12 +37,21 @@ class HttpResponseHandler<T>(
                 HttpStatus.SC_FORBIDDEN -> {
                     LOG.warn("BitBucket request forbidden (403)")
                     listener.actionForbidden()
-                    mapper.invoke(response.entity.content)
+                    // Don't hand the error body to the body mapper — it isn't the type the caller
+                    // asked for, and Jackson would throw something unrelated to the real problem.
+                    throw ForbiddenException
                 }
                 HttpStatus.SC_UNAUTHORIZED -> {
                     LOG.warn("BitBucket request unauthorized (401) — check the configured credentials/access token")
                     listener.invalidCredentials()
                     throw UnauthorizedException
+                }
+                HttpStatus.SC_NOT_FOUND -> {
+                    // Distinct from the generic branch below: for the repository-scoped endpoints a
+                    // 404 almost always means the configured project/slug is wrong, which deserves a
+                    // pointed message instead of a stack trace. See BitbucketClient.openPRs().
+                    LOG.warn("BitBucket resource not found (404)")
+                    throw NotFoundException
                 }
                 else -> {
                     LOG.warn("Unexpected BitBucket response: $statusCode ${status.reasonPhrase}")
@@ -54,4 +63,6 @@ class HttpResponseHandler<T>(
     }
 
     object UnauthorizedException: RuntimeException()
+    object ForbiddenException: RuntimeException()
+    object NotFoundException: RuntimeException()
 }
