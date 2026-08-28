@@ -1,7 +1,5 @@
 package ui
 
-import bitbucket.data.PR
-import bitbucket.data.PRParticipant
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.ui.JBPopupMenu
@@ -14,6 +12,8 @@ import com.intellij.ui.components.panels.HorizontalLayout
 import com.intellij.util.ui.EmptyIcon
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
+import domain.PR
+import domain.Participant
 import java.awt.*
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
@@ -77,7 +77,7 @@ open class PRComponent(val pr: PR, protected val actions: PRActions) : JPanel() 
         val updatedAt = friendlyTimeAgo(this.pr.updatedAt)
         val commentsCount = "${this.pr.commentCount} " + if (this.pr.commentCount == 1) { "comment" } else { "comments" }
         // <nobr> stops the HTML label from wrapping "ago" onto its own line.
-        this.authorLabel = JBLabel("<html><nobr><b>${escapeHtml(this.pr.author.user.displayName)}</b> "
+        this.authorLabel = JBLabel("<html><nobr><b>${escapeHtml(this.pr.author.displayName)}</b> "
                                  + "($commentsCount) last updated $updatedAt</nobr></html>",
                                  AllIcons.Vcs.Author, SwingConstants.LEFT)
         this.reviewersPanel = ReviewersPanel(ArrayList(this.pr.reviewers))
@@ -181,9 +181,9 @@ open class PRComponent(val pr: PR, protected val actions: PRActions) : JPanel() 
     }
 
     private fun createPrLinkLabel(pr: PR): LinkLabel<*> {
-        val prLinkLabel = LinkLabel.create(pr.title) { BrowserUtil.browse(pr.links.getSelfHref()) }
+        val prLinkLabel = LinkLabel.create(pr.title) { BrowserUtil.browse(pr.webUrl) }
         prLinkLabel.font = prLinkLabel.font.deriveFont(prLinkLabel.font.size * 1.2f)
-        prLinkLabel.toolTipText = "<html>${pr.links.getSelfHref()}</html>"
+        prLinkLabel.toolTipText = "<html>${pr.webUrl}</html>"
         return prLinkLabel
     }
 
@@ -294,7 +294,7 @@ class OwnPRComponent(ownPR: PR, actions: PRActions) : PRComponent(ownPR, actions
     }
 }
 
-class ReviewersPanel(reviewers: MutableList<PRParticipant>) : JPanel(HorizontalLayout(5)) {
+class ReviewersPanel(reviewers: MutableList<Participant>) : JPanel(HorizontalLayout(5)) {
     companion object {
         const val ALWAYS_DISPLAY_REVIEWERS_COUNT = 5
     }
@@ -302,7 +302,7 @@ class ReviewersPanel(reviewers: MutableList<PRParticipant>) : JPanel(HorizontalL
     init {
         this.isOpaque = false
         reviewers.sortWith(Comparator { o1, o2 -> o1.status.compareTo(o2.status) })
-        val labels: Map<PRParticipant, ReviewerItem> = reviewers.associateWith { prParticipant -> ReviewerItem(prParticipant) }
+        val labels: Map<Participant, ReviewerItem> = reviewers.associateWith { participant -> ReviewerItem(participant) }
 
         val alwaysVisibleReviewerCount = if (reviewers.size == ALWAYS_DISPLAY_REVIEWERS_COUNT + 1)
             reviewers.size
@@ -322,10 +322,10 @@ class ReviewersPanel(reviewers: MutableList<PRParticipant>) : JPanel(HorizontalL
             val height = this.preferredSize.height
             otherReviewersButton.preferredSize = Dimension(height, height)
             val menu = JBPopupMenu()
-            reviewers.takeLast(reviewersInCombo).forEach { prParticipant: PRParticipant ->
+            reviewers.takeLast(reviewersInCombo).forEach { participant: Participant ->
                 val itemPanel = JPanel(FlowLayout(FlowLayout.LEFT))
-                itemPanel.add(labels[prParticipant])
-                itemPanel.add(JLabel(prParticipant.user.displayName))
+                itemPanel.add(labels[participant])
+                itemPanel.add(JLabel(participant.displayName))
                 menu.add(itemPanel)
             }
             realButton.addMouseListener(object : MouseAdapter() {
@@ -337,10 +337,10 @@ class ReviewersPanel(reviewers: MutableList<PRParticipant>) : JPanel(HorizontalL
     }
 }
 
-class ReviewerItem(reviewer: PRParticipant) : JLayeredPane() {
+class ReviewerItem(reviewer: Participant) : JLayeredPane() {
     // Tooltip shows the name, since the icon itself is always the same generic avatar.
     private val avatarLabel: JLabel = JLabel(ReviewerComponentFactory.defaultAvatarIcon).apply {
-        toolTipText = reviewer.user.displayName
+        toolTipText = reviewer.displayName
     }
 
     companion object {

@@ -1,0 +1,210 @@
+{
+  "size": 1,
+  "limit": 100,
+  "isLastPage": true,
+  "start": 0,
+  "values": [
+    {
+      "id": 16914,
+      "version": 4,
+      "title": "[BUR-10000] Test PR",
+      "state": "OPEN",
+      "open": true,
+      "closed": false,
+      "createdDate": 1587651291973,
+      "updatedDate": 1587919986892,
+      "fromRef": {
+        "id": "refs/heads/bugfix/BUR-10000-XXX",
+        "displayId": "bugfix/BUR-10001-YYY",
+        "latestCommit": "1ce10e8a2fa43fafd812b8651bc2708114e3d798",
+        "repository": {
+          "slug": "burito",
+          "id": 151,
+          "name": "burito",
+          "scmId": "git",
+          "state": "AVAILABLE",
+          "statusMessage": "Available",
+          "forkable": true,
+          "project": {
+            "key": "BURITO",
+            "id": 26,
+            "name": "BURITO",
+            "public": false,
+            "type": "NORMAL",
+            "links": {
+              "self": [
+                {
+                  "href": "https://burito.com/projects/BURITO"
+                }
+              ]
+            }
+          },
+          "public": false,
+          "links": {
+            "clone": [
+              {
+                "href": "https://mole3@burito.com/scm/burito/burito.git",
+                "name": "http"
+              },
+              {
+                "href": "ssh://git@somerepo:7999/burito/burito.git",
+                "name": "ssh"
+              }
+            ],
+            "self": [
+              {
+                "href": "https://burito.com/projects/BURITO/repos/burito/browse"
+              }
+            ]
+          }
+        }
+      },
+      "toRef": {
+        "id": "refs/heads/story/BUR-9636-chart-describer-introduce-chart",
+        "displayId": "story/BUR-9636-chart-describer-introduce-chart",
+        "latestCommit": "e349943922d195a3a8d5ec8146af53812bda2604",
+        "repository": {
+          "slug": "burito",
+          "id": 151,
+          "name": "burito",
+          "scmId": "git",
+          "state": "AVAILABLE",
+          "statusMessage": "Available",
+          "forkable": true,
+          "project": {
+            "key": "BURITO",
+            "id": 26,
+            "name": "BURITO",
+            "public": false,
+            "type": "NORMAL",
+            "links": {
+              "self": [
+                {
+                  "href": "https://burito.com/projects/BURITO"
+                }
+              ]
+            }
+          },
+          "public": false,
+          "links": {
+            "clone": [
+              {
+                "href": "https://mole3@burito.com/scm/burito/burito.git",
+                "name": "http"
+              },
+              {
+                "href": "ssh://git@somerepo:7999/burito/burito.git",
+                "name": "ssh"
+              }
+            ],
+            "self": [
+              {
+                "href": "https://burito.com/projects/BURITO/repos/burito/browse"
+              }
+            ]
+          }
+        }
+      },
+      "locked": false,
+      "author": {
+        "user": {
+          "name": "mole1",
+          "emailAddress": "mole1@burito.com",
+          "id": 555,
+          "displayName": "First mole",
+          "active": true,
+          "slug": "mole1",
+          "type": "NORMAL",
+          "links": {
+            "self": [
+              {
+                "href": "https://burito.com/users/mole1"
+              }
+            ]
+          }
+        },
+        "role": "AUTHOR",
+        "approved": false,
+        "status": "UNAPPROVED"
+      },
+      "reviewers": [
+        {
+          "user": {
+            "name": "mole2",
+            "emailAddress": "mole2@burito.com",
+            "id": 64,
+            "displayName": "Second mole",
+            "active": true,
+            "slug": "mole2",
+            "type": "NORMAL",
+            "links": {
+              "self": [
+                {
+                  "href": "https://burito.com/users/mole2"
+                }
+              ]
+            }
+          },
+          "role": "REVIEWER",
+          "approved": false,
+          "status": "UNAPPROVED"
+        },
+        {
+          "user": {
+            "name": "mole3",
+            "emailAddress": "mole3@burito.com",
+            "id": 492,
+            "displayName": "Third mole",
+            "active": true,
+            "slug": "mole3",
+            "type": "NORMAL",
+            "links": {
+              "self": [
+                {
+                  "href": "https://burito.com/users/mole3"
+                }
+              ]
+            }
+          },
+          "role": "REVIEWER",
+          "approved": true,
+          "status": "APPROVED"
+        },
+        {
+          "user": {
+            "name": "mole4",
+            "emailAddress": "mole4@burito.com",
+            "id": 486,
+            "displayName": "Fourth mole",
+            "active": true,
+            "slug": "mole4",
+            "type": "NORMAL",
+            "links": {
+              "self": [
+                {
+                  "href": "https://burito.com/users/mole4"
+                }
+              ]
+            }
+          },
+          "role": "REVIEWER",
+          "approved": false,
+          "status": "UNAPPROVED"
+        }
+      ],
+      "participants": [],
+      "properties": {
+        "commentCount": 1,
+        "openTaskCount": 0,
+        "resolvedTaskCount": 0
+      },
+      "links": {
+        "self": [
+          {
+            "href": "https://burito.com/projects/BURITO/repos/burito/pull-requests/16914"
+          }
+        ]
+      }
+    }
+  ]
+}

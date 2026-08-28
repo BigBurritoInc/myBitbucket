@@ -1,18 +1,23 @@
 package ui
 
-import bitbucket.data.PR
+import bitbucket.ReviewAttention
 import com.intellij.ui.components.panels.VerticalLayout
 import com.intellij.util.ui.JBUI
+import domain.PR
 import java.awt.FlowLayout
 import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
 
 /**
- * @param isHidden pull requests this list collapses behind a "Show already approved" button instead
- *        of displaying outright. The Reviewing list uses it for the ones the user already approved.
+ * @param attentionOf how much of the user's attention each pull request still wants. Drives both the
+ *        display order (whatever needs doing first, approved last) and which ones collapse behind
+ *        the "Show already approved" button. The Created list has no reviewing angle, so it leaves
+ *        the default and every pull request sits in one bucket, ordered by recency alone.
  */
-abstract class Panel(private val isHidden: (PR) -> Boolean = { false }) : JPanel(), Listener {
+abstract class Panel(
+        private val attentionOf: (PR) -> ReviewAttention = { ReviewAttention.NEEDS_ATTENTION }
+) : JPanel(), Listener {
     companion object {
         const val GAP_BETWEEN_PR_COMPONENTS = 5
     }
@@ -45,8 +50,12 @@ abstract class Panel(private val isHidden: (PR) -> Boolean = { false }) : JPanel
     private fun rebuild() {
         synchronized(treeLock) {
             removeAll()
-            val hidden = prs.filter(isHidden)
-            val visible = if (showHidden) prs else prs.filterNot(isHidden)
+            // sortedBy is stable, so within a bucket the insertion order — newest first — survives.
+            // Sorting the whole list rather than the visible part is what keeps the order steady when
+            // the approved ones are revealed: they append to the end instead of interleaving.
+            val ordered = prs.sortedBy { attentionOf(it).ordinal }
+            val (hidden, alwaysVisible) = ordered.partition { attentionOf(it) == ReviewAttention.APPROVED }
+            val visible = if (showHidden) ordered else alwaysVisible
             visible.forEach { add(newComponent(it)) }
             if (hidden.isNotEmpty()) add(toggleHiddenButton())
         }

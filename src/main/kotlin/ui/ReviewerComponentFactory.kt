@@ -1,11 +1,11 @@
 package ui
 
-import bitbucket.data.PRParticipant
-import bitbucket.data.ParticipantStatus
 import com.intellij.icons.AllIcons
 import com.intellij.util.ui.ImageUtil
 import com.intellij.util.ui.JBImageIcon
 import com.intellij.util.ui.JBUI
+import domain.Participant
+import domain.ReviewStatus
 import java.awt.image.BufferedImage
 import javax.imageio.ImageIO
 import javax.swing.Icon
@@ -30,10 +30,10 @@ object ReviewerComponentFactory {
 
     val defaultAvatarIcon = JBImageIcon(defaultAvatar)
 
-    fun getStatusIcon(participant: PRParticipant): Icon? {
+    fun getStatusIcon(participant: Participant): Icon? {
         return when (participant.status) {
-            ParticipantStatus.NEEDS_WORK -> AllIcons.General.BalloonWarning
-            ParticipantStatus.APPROVED -> AllIcons.General.InspectionsOK
+            ReviewStatus.NEEDS_WORK -> AllIcons.General.BalloonWarning
+            ReviewStatus.APPROVED -> AllIcons.General.InspectionsOK
             else -> null
         }
     }

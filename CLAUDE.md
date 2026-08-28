@@ -162,6 +162,38 @@ shared the same PR list, the same poll loop, and the same ambiently-guessed proj
 so all windows ended up showing whichever project's data was guessed most recently. See "Known
 incidents" below for that history.
 
+## Domain model vs wire format
+
+`domain.PR` / `domain.Participant` / `domain.MergeStatus` are what the whole plugin above the client
+works in. They carry no Jackson annotations and no Bitbucket flavour. The wire format lives in
+`bitbucket.server.dto` and is mapped across by `bitbucket.server.ServerDtoMapper` at the client's
+edge — `BitbucketClient` is the only class that sees both.
+
+This exists because Bitbucket Server and Bitbucket Cloud disagree on nearly every field, and on some
+concepts entirely. The one that forced the split: **Cloud pull requests have no `version`.** Server
+sends `id, title, description, state, createdDate, updatedDate, fromRef, toRef, author, participants,
+reviewers, draft, links, properties, version`; Cloud sends `id, title, rendered, state, createdOn,
+updatedOn, closeSourceBranch, destination, source, mergeCommit, author, participants, links,
+commentCount, taskCount, draft`. Hence `PR.revision`, a monotonic "has this changed" token — Server's
+`version` counter, Cloud's update timestamp. Everything that used to compare versions (`PRState`'s
+diffing, `MergeStatusCache`) compares that instead. The Server client converts it back to an `Int`
+for the merge endpoint's optimistic locking, which is the one place the number itself matters.
+
+Other things the mapping absorbs, and which a Cloud mapper will have to absorb differently:
+
+- Server has separate `reviewers` and `participants`; Cloud has only `participants`, with a `role`
+  discriminator. The domain exposes `reviewers` and expects each backend to work out what that means.
+- Server nests identity as `user.name` / `user.displayName`; the domain flattens it to
+  `Participant.userName` / `displayName`, because Cloud users have no `name` at all (`uuid`,
+  `account_id`, `nickname`).
+- `PR.webUrl` replaces reaching into Server's `links.self[0].href`.
+- `MergeStatus.known` replaces the old mutable `unknown` flag, so the domain type is immutable.
+- Server omits `description` entirely when there isn't one; the domain always has a string.
+
+**Rule: no DTO type may appear outside `bitbucket.**`.** If a UI class needs something new from a
+pull request, add it to the domain and map it, rather than passing the DTO through — that's the
+whole point of the split.
+
 ## Fetching pull requests
 
 The poll reads the configured repository directly:
@@ -205,8 +237,13 @@ future: `run()` may already be executing on another thread and would otherwise r
 being cancelled. User actions don't wait out the backoff — `Model.approve`/`merge` call
 `UpdateTaskHolder.reschedule()`, which starts a fresh task at the floor delay and polls immediately.
 
-**The Reviewing list hides pull requests the user has already approved** behind a "Show approved
-pull requests" link (`Panel.isHidden`, supplied by `createReviewPanel`; `PR.isApprovedBy`). The tab
+**The Reviewing list is ordered by `ReviewAttention`** — needs attention, then changes requested,
+then approved — and collapses the approved ones behind a "Show already approved" button
+(`Panel.attentionOf`, supplied by `createReviewPanel`; `PR.attentionFor`). One function drives both,
+deliberately: sorting the *whole* list and then slicing off the approved tail is what keeps the
+visible cards in place when the button reveals the rest. Sorting only the visible part, or hiding
+without sorting, makes the revealed ones interleave and the list appear to reshuffle. `sortedBy` is
+stable, so recency order survives inside each bucket. The tab
 title counts the same subset — a title saying 5 above a list showing 2 reads as a bug. `Panel` keeps
 its own ordered `List<PR>` and rebuilds from it, rather than treating the Swing container as the
 model: hidden pull requests have no component at all, and the footer link isn't a `PRComponent`, so

@@ -1,7 +1,7 @@
 package bitbucket
 
-import bitbucket.data.PR
-import bitbucket.data.merge.MergeStatus
+import domain.MergeStatus
+import domain.PR
 import util.LOG
 
 /**
@@ -9,8 +9,8 @@ import util.LOG
  * all of them every cycle — that loop, not the pull request list itself, was the bulk of the
  * plugin's request volume. See CLAUDE.md "Fetching pull requests".
  *
- * A status is re-fetched only when the pull request's [PR.version] has increased. Bitbucket bumps
- * the version on every change to the pull request itself, so anything the user does to it refreshes
+ * A status is re-fetched only when the pull request's [PR.revision] has increased. Both backends
+ * move that on every change to the pull request itself, so anything the user does to it refreshes
  * the status; a steady repository costs nothing at all.
  *
  * The deliberate gap: merge status also changes when the **target branch** moves, which doesn't
@@ -29,7 +29,7 @@ class MergeStatusCache {
         private const val MAX_FETCHES_PER_CYCLE = 20
     }
 
-    private data class Entry(val version: Int, val status: MergeStatus)
+    private data class Entry(val revision: Long, val status: MergeStatus)
 
     private val byPrId = HashMap<Long, Entry>()
 
@@ -45,7 +45,7 @@ class MergeStatusCache {
         var fetched = 0
         for (pr in prs) {
             val cached = byPrId[pr.id]
-            if (cached != null && pr.version <= cached.version) {
+            if (cached != null && pr.revision <= cached.revision) {
                 pr.mergeStatus = cached.status
                 continue
             }
@@ -57,7 +57,7 @@ class MergeStatusCache {
             fetched++
             val status = fetch(pr)
             pr.mergeStatus = status
-            byPrId[pr.id] = Entry(pr.version, status)
+            byPrId[pr.id] = Entry(pr.revision, status)
         }
         LOG.debug("Merge status: ${prs.size} PR(s), $fetched fetched, ${prs.size - fetched} from cache")
     }

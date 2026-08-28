@@ -1,6 +1,6 @@
 package ui
 
-import bitbucket.data.PR
+import domain.PR
 
 data class Diff(
     val added: Map<Long, PR>,

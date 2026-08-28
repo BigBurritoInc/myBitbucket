@@ -1,10 +1,11 @@
 package bitbucket
 
-import bitbucket.data.PR
 import bitbucket.httpparams.Limit
 import bitbucket.httpparams.PROrder
 import bitbucket.httpparams.PRState
 import bitbucket.httpparams.Start
+import domain.PR
+import domain.ReviewStatus
 import http.UrlBuilder
 import ui.Settings
 import java.net.URL
@@ -40,17 +41,38 @@ fun pullRequestsUrl(settings: Settings, start: Int, limit: Int, avatarSize: Int)
 
 fun partitionPRs(prs: List<PR>, currentUser: String): RepositoryPRs {
     // Deliberately two passes rather than List.partition: a self-reviewed PR belongs in both lists.
-    val own = prs.filter { it.author.user.name.sameUserAs(currentUser) }
-    val reviewing = prs.filter { pr -> pr.reviewers.any { it.user.name.sameUserAs(currentUser) } }
+    val own = prs.filter { it.author.userName.sameUserAs(currentUser) }
+    val reviewing = prs.filter { pr -> pr.reviewers.any { it.userName.sameUserAs(currentUser) } }
     return RepositoryPRs(own, reviewing)
 }
 
 /**
- * Whether [user] has already approved this pull request. Null (the current user isn't known yet)
- * counts as "not approved", so nothing gets hidden before the first poll resolves the username.
+ * How much of the current user's attention a pull request still wants. Doubles as the Reviewing
+ * list's sort order — declaration order is display order — and as the rule for which ones collapse
+ * behind the "Show already approved" button.
  */
-fun PR.isApprovedBy(user: String?): Boolean =
-        user != null && reviewers.any { it.approved && it.user.name.sameUserAs(user) }
+enum class ReviewAttention {
+    /** Not looked at yet, as far as the user's own review status shows. */
+    NEEDS_ATTENTION,
+    /** The user asked for changes and is waiting on the author. */
+    CHANGES_REQUESTED,
+    /** The user already approved; nothing left to do. */
+    APPROVED
+}
+
+/**
+ * Null (the current user isn't known yet, before the first poll resolves the username) counts as
+ * [ReviewAttention.NEEDS_ATTENTION], so nothing is hidden or reordered on the strength of a guess.
+ */
+fun PR.attentionFor(user: String?): ReviewAttention {
+    if (user == null) return ReviewAttention.NEEDS_ATTENTION
+    val me = reviewers.firstOrNull { it.userName.sameUserAs(user) } ?: return ReviewAttention.NEEDS_ATTENTION
+    return when {
+        me.approved || me.status == ReviewStatus.APPROVED -> ReviewAttention.APPROVED
+        me.status == ReviewStatus.NEEDS_WORK -> ReviewAttention.CHANGES_REQUESTED
+        else -> ReviewAttention.NEEDS_ATTENTION
+    }
+}
 
 /**
  * Bitbucket treats usernames case-insensitively, and `X-AUSERNAME` echoes the stored casing, which

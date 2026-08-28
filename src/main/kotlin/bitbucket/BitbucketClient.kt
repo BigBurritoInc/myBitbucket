@@ -1,14 +1,17 @@
 package bitbucket
 
-import bitbucket.data.Approve
-import bitbucket.data.PR
-import bitbucket.data.PagedResponse
-import bitbucket.data.SimpleUser
-import bitbucket.data.merge.MergeStatus
-import bitbucket.data.merge.Veto
+import bitbucket.server.dto.ApproveRequestDto
+import bitbucket.server.dto.MergeStatusDto
+import bitbucket.server.dto.PageDto
+import bitbucket.server.dto.PullRequestDto
+import bitbucket.server.dto.SimpleUserDto
+import bitbucket.server.toDomain
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectReader
 import com.fasterxml.jackson.databind.ObjectWriter
+import domain.MergeStatus
+import domain.PR
+import domain.Veto
 import http.HttpResponseHandler
 import http.RequestFactory
 import http.UrlBuilder
@@ -39,11 +42,11 @@ class BitbucketClient(
     }
 
     private val mergeStatusResponseHandler = HttpResponseHandler(
-            objReader, object : TypeReference<MergeStatus>() {}, listener)
+            objReader, object : TypeReference<MergeStatusDto>() {}, listener)
     private val pagedResponseHandler = HttpResponseHandler(
-            objReader, object : TypeReference<PagedResponse<PR>>() {}, listener)
+            objReader, object : TypeReference<PageDto<PullRequestDto>>() {}, listener)
     private val pullRequestResponseHandler = HttpResponseHandler(
-            objReader, object : TypeReference<PR>() {}, listener)
+            objReader, object : TypeReference<PullRequestDto>() {}, listener)
 
     // One probe per client instance is enough: a server that strips X-AUSERNAME won't start
     // sending it. The client is recreated whenever the poll is rescheduled.
@@ -87,17 +90,19 @@ class BitbucketClient(
         }
     }
 
+    /** Mapped to the domain here, at the edge — nothing above this sees Server's wire format. */
+    private fun fetchOpenPRs(): List<PR> = fetchPage(0, PAGE_SIZE).map { it.toDomain() }
+
     /**
      * One page of the repository's open pull requests, then the rest of them.
      *
      * [limit] has to travel through the paging replay: leave it out and only the first page uses
      * PAGE_SIZE while every later page silently falls back to Bitbucket's default of 25.
      */
-    private fun fetchOpenPRs(start: Int = 0, limit: Int = PAGE_SIZE): List<PR> {
+    private fun fetchPage(start: Int, limit: Int): List<PullRequestDto> {
         val url = pullRequestsUrl(settings, start, limit, AVATAR_SIZE)
         LOG.debug("Requesting open PRs: $url")
-        val request = httpRequestFactory.createGet(url)
-        return replayPageRequest(request) { fetchOpenPRs(it, limit) }
+        return replayPageRequest(httpRequestFactory.createGet(url)) { fetchPage(it, limit) }
     }
 
     /**
@@ -143,7 +148,7 @@ class BitbucketClient(
                     "projects", settings.project, "repos", settings.slug, "pull-requests", pr.id.toString(), "participants", user)
             LOG.debug("Approving PR ${pr.id}: PUT ${urlBuilder.toUrlString()}")
             val request = httpRequestFactory.createPut(urlBuilder.toUrlString())
-            val body = objWriter.writeValueAsBytes(Approve(SimpleUser(user)))
+            val body = objWriter.writeValueAsBytes(ApproveRequestDto(SimpleUserDto(user)))
             val entity = ByteArrayEntity(body)
             request.entity = entity
             HttpResponseHandler.handle(httpClient.execute(request))
@@ -158,7 +163,7 @@ class BitbucketClient(
             val urlBuilder = mergeUrl(pr)
             LOG.debug("Merging PR ${pr.id}: POST ${urlBuilder.toUrlString()}")
             val request = httpRequestFactory.createPost(urlBuilder.toUrlString())
-            sendRequest(request, pullRequestResponseHandler)
+            sendRequest(request, pullRequestResponseHandler).toDomain()
         } catch (e: Exception) {
             listener.requestFailed(e)
             pr
@@ -169,19 +174,21 @@ class BitbucketClient(
         return try {
             val urlBuilder = mergeUrl(pr)
             val request = httpRequestFactory.createGet(urlBuilder.toUrlString())
-            val mergeStatus = sendRequest(request, mergeStatusResponseHandler)
-            mergeStatus.unknown = false
-            mergeStatus
+            sendRequest(request, mergeStatusResponseHandler).toDomain()
         } catch (e: Exception) {
             listener.requestFailed(e)
-            MergeStatus(false, false, listOf(Veto("Request Error", "")))
+            // Known, not UNKNOWN: the request happened and failed, so don't keep retrying it every
+            // cycle — MergeStatusCache treats it like any other answer until the PR changes.
+            MergeStatus(canMerge = false, conflicted = false,
+                    vetoes = listOf(Veto("Could not read the merge status", "")), known = true)
         }
     }
 
     private fun mergeUrl(pr: PR): UrlBuilder {
         return urlBuilder().pathSegments(
                 "projects", settings.project, "repos", settings.slug, "pull-requests", pr.id.toString(), "merge")
-                .queryParam("version", pr.version.toString())
+                // Server's optimistic locking. The domain revision is exactly that version.
+                .queryParam("version", pr.revision.toString())
     }
 
     private fun urlBuilder() = UrlBuilder.fromUrl(URL(settings.url)).pathSegments("rest", "api", "1.0")
@@ -194,7 +201,8 @@ class BitbucketClient(
         return responseHandler.handle(response)
     }
 
-    private fun replayPageRequest(request: HttpUriRequest, replay: (Int) -> List<PR>): List<PR> {
+    private fun replayPageRequest(request: HttpUriRequest,
+                                  replay: (Int) -> List<PullRequestDto>): List<PullRequestDto> {
         val pagedResponse = sendRequest(request, pagedResponseHandler)
         val prs = ArrayList(pagedResponse.values)
         if (!pagedResponse.isLastPage)

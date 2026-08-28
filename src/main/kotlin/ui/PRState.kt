@@ -1,6 +1,6 @@
 package ui
 
-import bitbucket.data.PR
+import domain.PR
 
 class PRState(private val prsMap: Map<Long, PR> = HashMap()) {
     fun createDiff(prs: List<PR>): Diff {
@@ -9,8 +9,8 @@ class PRState(private val prsMap: Map<Long, PR> = HashMap()) {
         val added = newMap.filterKeys { !prsMap.containsKey(it) }
         val updated = newMap.filterKeys { prsMap.containsKey(it) && prsMap[it] != newMap[it]
         //It is not clear if any change leads to version change so if versions are equal consider it as a change
-                && prsMap.getValue(it).version <= newMap.getValue(it).version }
-        val mergeStatusChanged = newMap.filter { !it.value.mergeStatus.unknown }
+                && prsMap.getValue(it).revision <= newMap.getValue(it).revision }
+        val mergeStatusChanged = newMap.filter { it.value.mergeStatus.known }
                 .filterKeys { prsMap.containsKey(it)
                     && prsMap[it]?.mergeStatus?.canMerge != newMap[it]?.mergeStatus?.canMerge }
         return Diff(added, updated, removed, mergeStatusChanged)
@@ -30,7 +30,7 @@ class PRState(private val prsMap: Map<Long, PR> = HashMap()) {
     }
 
     private fun hasNewerVersion(newPRsMap: Map<Long, PR>, entry: Map.Entry<Long, PR>) =
-            (newPRsMap.containsKey(entry.key) && (entry.value.version < newPRsMap.getValue(entry.key).version))
+            (newPRsMap.containsKey(entry.key) && (entry.value.revision < newPRsMap.getValue(entry.key).revision))
 
     fun size() = prsMap.size
 }

@@ -1,8 +1,11 @@
 
-import bitbucket.data.*
 import com.intellij.ui.scale.JBUIScale
+import domain.PR
+import domain.Participant
+import domain.ReviewStatus
 import ui.*
-import java.util.*
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import javax.swing.JFrame
 import javax.swing.JScrollPane
 import kotlin.collections.HashMap
@@ -49,38 +52,37 @@ object PanelRunner {
         for (p in 0..id % 3)
             title += " more info"
 
-
         var to = "feature/PROJ-1955-it-is-a-feature-that-has-a-story-branch"
-
         for (k in 0..id % 4)
             to += "8984"
-        val repo = Repository("slug", Project("project_key"))
-        val props = PRProperties(1)
-        val reviewers = HashSet<PRParticipant>()
+
+        val reviewers = HashSet<Participant>()
         if (reviewersCount != 0) {
             for (userId in 0..reviewersCount) {
-                reviewers.add(PRParticipant(
-                        User("UserName$userId", "username$userId@email.com", userId.toLong(), "FirstName$userId LastName$userId",
-                                Links(listOf(Links.Link("https://www.atlassian.com/software/bitbucket")))),
+                reviewers.add(Participant(
+                        "UserName$userId",
+                        "FirstName$userId LastName$userId",
                         userId % 2 == 0,
-                        ParticipantStatus.entries[(userId % ParticipantStatus.entries.size)]
-                ))
+                        ReviewStatus.entries[(userId % ReviewStatus.entries.size)]))
             }
         }
 
-        return PR(id, title,
-                PRParticipant(User("har993", "billybobharley.is.here@tdameritrade.com", 2, "Billy Bob Harley",
-                        Links(listOf(Links.Link("https://developer.atlassian.com/bitbucket/api/2/reference/")))), false, ParticipantStatus.UNAPPROVED),
-                false,
-                Branch("$br$id", repo),
-                Branch(to, repo),
-                reviewers,
-                Date(System.currentTimeMillis()), Date(System.currentTimeMillis()),
-                props,
-                Links(listOf(Links.Link("https://developer.atlassian.com/bitbucket/api/2/reference/"))), 0,
+        val now = ZonedDateTime.now(ZoneId.of("UTC"))
+        return PR(
+                id = id,
+                title = title,
                 // Every third PR gets a description, to preview both card variants.
-                if (id % 3 == 0L) descriptionSample(id) else null
-        )
+                description = if (id % 3 == 0L) descriptionSample(id) else "",
+                fromBranch = "$br$id",
+                toBranch = to,
+                author = Participant("har993", "Billy Bob Harley", false, ReviewStatus.UNAPPROVED),
+                reviewers = reviewers,
+                createdAt = now,
+                updatedAt = now,
+                commentCount = 1,
+                webUrl = "https://developer.atlassian.com/bitbucket/api/2/reference/",
+                revision = 0,
+                closed = false)
     }
 
     private fun descriptionSample(id: Long) = """

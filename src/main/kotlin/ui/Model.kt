@@ -3,7 +3,7 @@ package ui
 import Git
 import VCS
 import bitbucket.BitbucketClientFactory
-import bitbucket.data.PR
+import domain.PR
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.notification.Notifications
@@ -82,7 +82,7 @@ class Model(private val project: Project) : PRActions {
             if (diff.added.isNotEmpty()) {
                 val message = if (diff.added.size == 1) {
                     val pr = diff.added.values.iterator().next()
-                    "New Pull Request is available: \n ${pr.title} \n By: <b>${pr.author.user.displayName}</b>"
+                    "New Pull Request is available: \n ${pr.title} \n By: <b>${pr.author.displayName}</b>"
                 } else {
                     "${diff.added.size} pull requests are available"
                 }

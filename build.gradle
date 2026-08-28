@@ -6,7 +6,7 @@ plugins {
 
 group 'BigBurritoInc'
 // Bump on every change intended for reinstall (0.7 -> 0.7.1 -> ...) — see CLAUDE.md "Versioning".
-version '0.5.6'
+version '0.5.7'
 
 dependencies {
     intellijPlatform {
@@ -73,6 +73,8 @@ intellijPlatform {
             untilBuild = null
         }
         changeNotes = """
+          v0.5.7 The Reviewing tab lists pull requests in the order you need to act on them: waiting
+          on you first, then the ones where you asked for changes, then already approved.<br><br>
           v0.5.6 The plugin now checks for updates more often when things are moving and backs off when
           they are not, instead of polling on a fixed timer.<br><br>
           v0.5.3 Settings, pull requests, and Checkout are now independent per project - opening
