@@ -22,10 +22,8 @@ class MergeStatusCacheTest {
         assertEquals(1, fetchCount)
     }
 
-    /**
-     * The point of the cache. Also asserts the status lands on the new PR object: every poll
-     * parses fresh ones, and Diff.mergeStatusChanged ignores any whose status is still unknown.
-     */
+    /** The point of the cache — also asserts the status lands on the new PR object, since every
+     * poll parses fresh ones and Diff.mergeStatusChanged ignores unknown status. */
     @Test
     fun unchangedPRIsServedFromCache() {
         val cache = MergeStatusCache()

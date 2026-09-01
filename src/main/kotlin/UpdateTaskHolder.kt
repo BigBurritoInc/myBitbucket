@@ -2,13 +2,19 @@ import bitbucket.BitbucketClient
 import bitbucket.BitbucketClientFactory
 import bitbucket.ClientListener
 import bitbucket.CurrentUser
+import bitbucket.InboxTracker
 import bitbucket.MergeStatusCache
+import bitbucket.RepositoryPRs
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.intellij.util.concurrency.AppExecutorUtil
+import credentials.CloudOAuth
+import credentials.CredentialStore
 import http.HttpResponseHandler
+import ui.InboxStore
 import ui.Model
+import ui.Storer
 import util.LOG
 import java.io.IOException
 import java.net.UnknownHostException
@@ -18,27 +24,32 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import javax.net.ssl.SSLHandshakeException
 
-// One instance per open project (light service) — each project polls its own configured
-// Bitbucket repo independently, instead of one global poll loop shared by every open project.
+// docs: Per-project state
 @Service(Service.Level.PROJECT)
 class UpdateTaskHolder(private val project: Project) {
     companion object {
-        // The poll paces itself between these two: every cycle that finds nothing new doubles the
-        // wait, anything that changes drops it straight back to the floor. A repository nobody is
-        // touching settles at one request every two minutes instead of 240 an hour.
         const val MIN_DELAY_SECONDS = 15L
         const val MAX_DELAY_SECONDS = 120L
+        // Inbox tab is implemented but disabled — its UX needs a rework before it ships to users.
+        // Flip this back on once that's done; don't delete the feature code. docs: Inbox
+        const val INBOX_FEATURE_ENABLED = false
     }
 
     private val lock = Any()
     var task: CancellableTask = DummyTask()
 
+    // Dispatches off-thread (blocking PasswordSafe read) — makes stop() racy against a pending
+    // schedule. docs: Basic Auth
     fun reschedule() {
-        createAndRun { task.createToReschedule(it) }
+        AppExecutorUtil.getAppScheduledExecutorService().execute {
+            createAndRun { task.createToReschedule(it) }
+        }
     }
 
     fun scheduleNew() {
-        createAndRun { task.createNew(it) }
+        AppExecutorUtil.getAppScheduledExecutorService().execute {
+            createAndRun { task.createNew(it) }
+        }
     }
 
     fun stop() {
@@ -50,16 +61,14 @@ class UpdateTaskHolder(private val project: Project) {
 
     private fun createAndRun(factory: (BitbucketClient) -> CancellableTask) {
         synchronized(lock) {
-            //this lock is needed to make task initialization atomic
-            //if you want to cancel this task from another thread, you will have to wait until this block completes
+            // Makes task initialization atomic; cancelling from another thread waits for this block.
             task.cancel()
-            // A rescheduled poll may be running against freshly entered credentials, so the
-            // identity learned from the old ones must not carry over.
+            // Clears CurrentUser so a newly configured credential can't inherit the old identity.
             project.getService(CurrentUser::class.java).clear()
             val client = BitbucketClientFactory.createClient(project, NotifyingClientListener())
             task = factory.invoke(client)
-            // One-shot, not scheduleWithFixedDelay: UpdateTask re-arms itself with a delay that
-            // depends on whether the last cycle found anything.
+            // One-shot, not scheduleWithFixedDelay — UpdateTask re-arms itself with a delay based
+            // on the last cycle.
             task.setFuture(AppExecutorUtil.getAppScheduledExecutorService().schedule(task, 0, TimeUnit.SECONDS))
         }
     }
@@ -79,6 +88,7 @@ class UpdateTaskHolder(private val project: Project) {
         private var delaySeconds = MIN_DELAY_SECONDS
 
         private val mergeStatusCache = MergeStatusCache()
+        private val inboxTracker = InboxTracker()
 
         override fun run() {
             try {
@@ -109,18 +119,18 @@ class UpdateTaskHolder(private val project: Project) {
                 LOG.debug("Running UpdateTask...")
                 val prs = client.openPRs()
                 if (prs == null) {
-                    // Not the same as "no pull requests": leave the lists alone rather than empty
-                    // them and then report every PR as new again on the next successful cycle.
+                    // Not "no pull requests" — leave lists alone rather than report every PR as
+                    // new next cycle. docs: Known incidents
                     LOG.warn("UpdateTask: skipping this cycle, pull requests could not be fetched")
                     recordCycle(changed = false)
                     return
                 }
                 val reviewingChanged = model.updateReviewingPRs(prs.reviewing)
-                // own and reviewing are filtered from the same list, so a self-reviewed PR is the
-                // same object in both and gets its merge status set once. That's intentional —
-                // both tabs then agree, and PR.equals() excludes mergeStatus anyway.
+                // own/reviewing share the same object for a self-reviewed PR, so merge status is
+                // set once; PR.equals() excludes it anyway.
                 mergeStatusCache.applyTo(prs.own) { client.retrieveMergeStatus(it) }
                 val ownChanged = model.updateOwnPRs(prs.own)
+                if (INBOX_FEATURE_ENABLED) checkInbox(client, prs)
                 recordCycle(reviewingChanged || ownChanged)
             } catch (e: HttpResponseHandler.UnauthorizedException) {
                 LOG.warn("UpdateTask stopped: unauthorized")
@@ -137,21 +147,33 @@ class UpdateTaskHolder(private val project: Project) {
             }
         }
 
+        // Defensive: openPRs() already returns null and skips the cycle when there's no user
+        // identifier, so this is never actually reached without one.
+        private fun checkInbox(client: BitbucketClient, prs: RepositoryPRs) {
+            val currentUser = client.currentUserIdentifier() ?: return
+            val inboxStore = project.getService(InboxStore::class.java)
+            val events = inboxTracker.detect(client, prs.own, prs.reviewing, currentUser, inboxStore)
+            if (events.isEmpty()) return
+            inboxStore.recordEvents(events)
+            val settings = project.getService(Storer::class.java)!!.settings
+            project.getService(Model::class.java)
+                    .publishInboxEvents(events, settings.inboxNotificationsEnabled, inboxStore.unreadCount())
+        }
+
         override fun setFuture(future: ScheduledFuture<*>) {
             this.taskFuture = future
         }
 
         override fun cancel() {
             synchronized(lock) {
-                // Set before cancelling the future: run()'s finally block re-arms unless this is set,
-                // and it may already be executing on another thread.
+                // Set before cancelling the future — run() may already be executing on another
+                // thread and would otherwise re-arm itself.
                 cancelled = true
                 taskFuture?.cancel(true)
             }
         }
     }
 
-    //This class does nothing
     inner class DummyTask: CancellableTask {
         override fun createNew(client: BitbucketClient): CancellableTask = UpdateTask(client)
         override fun createToReschedule(client: BitbucketClient): CancellableTask = DummyTask()
@@ -170,15 +192,23 @@ class UpdateTaskHolder(private val project: Project) {
     // inner: cancels the enclosing UpdateTaskHolder's own task after too many consecutive errors.
     inner class NotifyingClientListener: ClientListener {
         private val errorCounter: AtomicInteger = AtomicInteger(0)
-        // These two are configuration problems, not transient failures — they'd otherwise repeat
-        // every 15 seconds until the user fixes Settings, which is when the poll is rescheduled and
-        // this listener replaced anyway.
+        // Configuration problems, not transient failures — they'd otherwise repeat every 15s
+        // until Settings is fixed, which replaces this listener anyway.
         private val notFoundReported = AtomicBoolean(false)
         private val unknownUserReported = AtomicBoolean(false)
         private val model get() = project.getService(Model::class.java)
 
         override fun invalidCredentials() {
-            model.showNotification("Invalid BitBucket credentials! \n" +
+            // Clears the invalid secret so reconfigure doesn't silently reuse it; always off the
+            // EDT already. docs: Basic Auth
+            val settings = project.getService(Storer::class.java)!!.settings
+            if (settings.cloud) {
+                CloudOAuth.clear()
+            } else {
+                CredentialStore.hostAuthorityFor(settings.url)?.let { CredentialStore.clear(it) }
+            }
+            model.showNotification("Invalid Bitbucket credentials! Use \"Reconfigure Bitbucket repo…\" " +
+                    "to sign in again. \n" +
                     "Or it could be required to enter captcha in the web-interface.", NotificationType.WARNING)
 
         }
@@ -205,8 +235,8 @@ class UpdateTaskHolder(private val project: Project) {
         }
 
         override fun repositoryNotFound(message: String) {
-            // Not routed through requestFailed(): that logs at ERROR, which raises the IDE's
-            // "internal error" balloon, and counts towards the budget that cancels the poll.
+            // Not routed through requestFailed(): that logs at ERROR (raises the IDE's "internal
+            // error" balloon) and counts towards the budget that cancels the poll.
             LOG.warn(message)
             if (notFoundReported.compareAndSet(false, true)) {
                 model.showNotification(message, NotificationType.WARNING)
@@ -216,8 +246,8 @@ class UpdateTaskHolder(private val project: Project) {
         override fun currentUserUnknown() {
             if (unknownUserReported.compareAndSet(false, true)) {
                 model.showNotification("myBitbucket could not determine which Bitbucket user your " +
-                        "access token belongs to, so pull requests can't be listed. " +
-                        "Check the token in myBitbucket settings.", NotificationType.WARNING)
+                        "credentials belong to, so pull requests can't be listed. " +
+                        "Use \"Reconfigure Bitbucket repo…\" to check it.", NotificationType.WARNING)
             }
         }
     }

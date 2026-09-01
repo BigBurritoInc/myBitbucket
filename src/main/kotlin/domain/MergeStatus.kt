@@ -1,13 +1,7 @@
 package domain
 
-/**
- * Whether a pull request can be merged right now.
- *
- * [known] is false until the answer has actually been fetched — a freshly parsed pull request has
- * no merge status, and reporting that as "cannot merge" would grey out the Merge button and fire a
- * spurious "can be merged" notification the moment the real answer arrived. PRState's diffing skips
- * unknown statuses for exactly that reason.
- */
+/** Whether a PR can be merged right now. [known] stays false until actually fetched, so a fresh
+ * PR isn't read as "cannot merge". docs: Fetching pull requests */
 data class MergeStatus(
         val canMerge: Boolean,
         val conflicted: Boolean,

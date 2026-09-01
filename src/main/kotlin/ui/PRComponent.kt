@@ -23,9 +23,7 @@ import javax.swing.*
 import javax.swing.event.HyperlinkEvent
 
 
-// What a PRComponent's Checkout/Approve/Merge buttons need. Model implements this; PanelRunner
-// stubs it with no-ops, since it runs standalone without a real project — see CLAUDE.md
-// "PanelRunner".
+// docs: PanelRunner
 interface PRActions {
     fun checkout(pr: PR)
     fun approve(pr: PR, callback: Consumer<Boolean>)
@@ -34,12 +32,14 @@ interface PRActions {
 
 open class PRComponent(val pr: PR, protected val actions: PRActions) : JPanel() {
 
-    val greenColor: Color = JBColor.GREEN
+    val green = Color(86, 167, 106)
+    val greenColor: Color = JBColor(green, green)
 
     private val checkoutBtn = JButton("Checkout", AllIcons.Vcs.Branch)
     val approveBtn = JButton("Approve", AllIcons.General.InspectionsOK)
     val mergeBtn = JButton("Merge", AllIcons.Vcs.Merge)
     private val prLink: JLabel
+    private val featureBranchLabel: JLabel
     private val targetBranchLabel: JLabel
     private val authorLabel: JBLabel
     private val reviewersPanel: ReviewersPanel
@@ -55,9 +55,8 @@ open class PRComponent(val pr: PR, protected val actions: PRActions) : JPanel() 
             add(descriptionSeparator(), BorderLayout.SOUTH)
         }
     }
-    // JLabel, not JButton: button chrome padding fights the GridBagLayout insets below. Always
-    // present (blank icon when there's no description) so column 0's width never depends on
-    // whether a given PR has a description — see createExpandToggleLabel().
+    // JLabel, not JButton — button chrome padding fights the GridBagLayout insets below. Always
+    // present (blank icon if no description) so column 0's width never depends on it.
     private val expandToggleLabel: JLabel = createExpandToggleLabel()
     private var expanded = false
     private var onToggleExpand: (() -> Unit)? = null
@@ -73,6 +72,7 @@ open class PRComponent(val pr: PR, protected val actions: PRActions) : JPanel() 
 
     init {
         this.prLink = this.createPrLinkLabel(this.pr)
+        this.featureBranchLabel = JBLabel(this.pr.fromBranch, SwingConstants.LEFT)
         this.targetBranchLabel = JBLabel(this.pr.toBranch, AllIcons.Vcs.Arrow_right, SwingConstants.LEFT)
         val updatedAt = friendlyTimeAgo(this.pr.updatedAt)
         val commentsCount = "${this.pr.commentCount} " + if (this.pr.commentCount == 1) { "comment" } else { "comments" }
@@ -134,6 +134,10 @@ open class PRComponent(val pr: PR, protected val actions: PRActions) : JPanel() 
         gbc.gridy++
         this.add(this.authorLabel, gbc)
         gbc.gridy++
+        // todo: place featureBranchLabel properly first
+        //gbc.gridx = 0
+        //this.add(this.featureBranchLabel, gbc)
+        //gbc.gridx = 1
         this.add(this.targetBranchLabel, gbc)
 
         gbc.weightx = 0.0
@@ -142,9 +146,8 @@ open class PRComponent(val pr: PR, protected val actions: PRActions) : JPanel() 
         gbc.fill = GridBagConstraints.NONE
         gbc.insets.top = TOP_BOTTOM_INSET
         gbc.insets.bottom = TOP_BOTTOM_INSET
-        // Column 0 stays reserved for the chevron (never used here) so its width never depends
-        // on the button row. Checkout and approve share one cell — same position, same size —
-        // since exactly one of them is ever visible at a time (see currentBranchChanged()).
+        // Column 0 stays reserved for the chevron so its width never depends on the button row.
+        // Checkout and approve share one cell — exactly one is ever visible (currentBranchChanged()).
         gbc.gridx = 1
         this.approveBtn.preferredSize = this.checkoutBtn.preferredSize
         this.add(this.checkoutBtn, gbc)
@@ -210,10 +213,8 @@ open class PRComponent(val pr: PR, protected val actions: PRActions) : JPanel() 
         pane.isEditable = false
         pane.isOpaque = false
         pane.border = null
-        // Pull theme colors from UIManager — Swing's HTML rendering defaults to black text.
-        // Label.foreground itself is too pale to read at this text size under some light themes
-        // (e.g. Islands Light) — Gray._30 is a standard IntelliJ Platform gray, dark enough to
-        // read without going full black. Dark themes are untouched: still Label.foreground.
+        // UIManager over Label.foreground: the latter is too pale on some light themes (e.g.
+        // Islands Light); Gray._30 reads fine without going full black. Dark themes untouched.
         val foreground = if (JBColor.isBright()) Gray._30 else UIManager.getColor("Label.foreground") ?: Color.BLACK
         val font = UIManager.getFont("Label.font")
         val colorHex = String.format("#%02x%02x%02x", foreground.red, foreground.green, foreground.blue)

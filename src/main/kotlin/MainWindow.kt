@@ -1,41 +1,68 @@
-import bitbucket.BitbucketClientFactory
-import com.intellij.openapi.options.ConfigurationException
+import com.intellij.credentialStore.Credentials
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.DumbAware
+import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
-import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.panels.VerticalLayout
 import com.intellij.ui.content.Content
 import com.intellij.ui.content.ContentManager
+import credentials.CloudOAuth
+import credentials.CredentialStore
+import credentials.GitCredentialHelper
+import discovery.DiscoveredRemote
+import discovery.discoverRepositoryUrl
 import git4idea.repo.GitRepository
 import git4idea.repo.GitRepositoryChangeListener
 import ui.*
-import util.invokeLater
 import java.awt.*
-import java.awt.event.KeyEvent
-import java.awt.event.KeyListener
 import javax.swing.*
 
 
+// A ToolWindowFactory instance is shared across every open project — the platform calls
+// createToolWindowContent(project, ...) once per project on the SAME instance, which is exactly
+// why every method here takes project/toolWindow as an explicit parameter instead of this class
+// ever storing one on `this`. It used to: `project`/`window`/`reviewingContent`/`ownContent`/
+// `inboxContent` were instance fields, so opening a second project silently overwrote the first
+// project's — "Reconfigure" in project A's gear menu could end up reading/writing project B's
+// Storer, and a tab title update could land on the wrong project's tool window. Fixed by making
+// every per-project value a local, closed over by that project's own callbacks only.
+// docs: Per-project state, Known incidents
 class MainWindow : ToolWindowFactory, DumbAware {
 
-    private var window: ToolWindow? = null
+    override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
+        val settings = project.getService(Storer::class.java)!!.settings
+        if (settings.isConfigured()) {
+            showConfiguredContent(project, toolWindow)
+        } else {
+            showAddProjectPrompt(project, toolWindow)
+        }
+    }
 
-    private lateinit var project: Project
-    private lateinit var reviewingContent: Content
-    private lateinit var ownContent: Content
+    private fun showConfiguredContent(project: Project, toolWindow: ToolWindow) {
+        val model = project.getService(Model::class.java)
+        val cm = toolWindow.contentManager
+        val reviewingPanel = createReviewPanel(project)
+        val ownPanel = createOwnPanel(project)
+        val settings = project.getService(Storer::class.java)!!.settings
 
-    override fun createToolWindowContent(prj: Project, window: ToolWindow) {
-        this.project = prj
-        this.window = window
-        val model = prj.getService(Model::class.java)
-        val cm = window.contentManager
-        val reviewingPanel = createReviewPanel(prj)
-        val ownPanel = createOwnPanel(prj)
-
-        reviewingContent = addTab(cm, wrapIntoJBScroll(reviewingPanel), "Reviewing (0)")
-        ownContent = addTab(cm, wrapIntoJBScroll(ownPanel), "Created (0)")
+        val reviewingContent = addTab(cm, wrapIntoJBScroll(reviewingPanel), "Reviewing (0)")
+        val ownContent = addTab(cm, wrapIntoJBScroll(ownPanel), "Created (0)")
+        // Inbox tab is implemented but disabled pending a UX rework — see
+        // UpdateTaskHolder.INBOX_FEATURE_ENABLED. Null here (this project's local, not shared)
+        // just means the feature is off; inboxUnreadCountChanged() below no-ops on it. docs: Inbox
+        var inboxContent: Content? = null
+        if (UpdateTaskHolder.INBOX_FEATURE_ENABLED) {
+            val inboxStore = project.getService(InboxStore::class.java)
+            val inboxPanel = InboxPanel(inboxStore, settings)
+            val content = addTab(cm, wrapIntoJBScroll(inboxPanel), "Inbox (${inboxStore.unreadCount()})")
+            inboxContent = content
+            inboxPanel.setOnUnreadCountChanged { count -> content.displayName = "Inbox ($count)" }
+            model.addListener(inboxPanel)
+        }
 
         model.addListener(object: Listener {
             override fun ownCountChanged(count: Int) {
@@ -45,75 +72,100 @@ class MainWindow : ToolWindowFactory, DumbAware {
             override fun reviewedCountChanged(count: Int) {
                 reviewingContent.displayName = "Reviewing ($count)"
             }
+
+            override fun inboxUnreadCountChanged(count: Int) {
+                inboxContent?.displayName = "Inbox ($count)"
+            }
         })
         cm.setSelectedContent(reviewingContent)
 
         model.addListener(reviewingPanel)
         model.addListener(ownPanel)
-        runUpdateTaskLater()
+        project.getService(UpdateTaskHolder::class.java).scheduleNew()
 
-        // Re-highlight the checked-out PR as soon as the branch actually changes, instead of
-        // only on the next 15s poll — covers checkout from the IDE's own branch widget/terminal,
-        // not just the plugin's own Checkout button (which already calls model.branchChanged()
-        // straight from its own callback).
-        prj.messageBus.connect(prj).subscribe(GitRepository.GIT_REPO_CHANGE,
+        // Re-highlight on any branch change, not just the next poll — covers checkout from the
+        // IDE's own branch widget/terminal, not only this plugin's own Checkout button.
+        project.messageBus.connect(project).subscribe(GitRepository.GIT_REPO_CHANGE,
                 GitRepositoryChangeListener { model.branchChanged() })
+
+        // Inline action, no plugin.xml <action> entry — same pattern DemoModeAction uses to stay
+        // out of Find Action/menus, here reached only from the tool window's own gear icon.
+        val reconfigureAction = object : DumbAwareAction("Reconfigure Bitbucket repo…") {
+            override fun actionPerformed(e: AnActionEvent) = reconfigure(project)
+        }
+        toolWindow.setAdditionalGearActions(DefaultActionGroup(reconfigureAction))
     }
 
-    private fun runUpdateTaskLater() {
-        invokeLater {
-            val settings = project.getService(Storer::class.java)!!.settings
-            if (settings.url.isNotBlank()) {
-                settings.validate()
-                project.getService(UpdateTaskHolder::class.java).scheduleNew()
-            }
-        }
-    }
-
-    // Unused — Basic Auth login UI is hidden from the tool window, kept for reference.
-    @Suppress("unused")
-    private fun createLoginPanel(contentManager: ContentManager, reviewingContent: Content): JPanel {
-        val wrapper = JPanel(BorderLayout())
-        val passwordLabel = JBLabel("Password:")
-        val passwordField = JPasswordField()
-        val messageField = JBLabel()
-        val button = JButton("Login")
-        button.isEnabled = false
-        val listener = {
-            try {
-                messageField.text = ""
-                project.getService(Storer::class.java)!!.settings.validate()
-                BitbucketClientFactory.password = passwordField.password
-                project.getService(UpdateTaskHolder::class.java).scheduleNew()
-                passwordField.text = ""
-                button.isEnabled = false
-                contentManager.setSelectedContent(reviewingContent)
-            } catch (e: ConfigurationException) {
-                messageField.text = e.title + ". " + e.message
-            }
-        }
-        button.addActionListener {listener.invoke()}
-
-        passwordField.addKeyListener(object : KeyListener{
-            override fun keyTyped(e: KeyEvent?) { }
-
-            override fun keyPressed(e: KeyEvent?) {
-                if (e != null && e.keyCode == KeyEvent.VK_ENTER)
-                    listener.invoke()
-            }
-
-            override fun keyReleased(e: KeyEvent?) {
-                button.isEnabled = !passwordField.password.isEmpty()
-            }
-        })
-        val panel = JPanel(VerticalLayout(5))
-        panel.border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
-        panel.add(passwordLabel)
-        panel.add(passwordField)
+    // docs: Basic Auth
+    private fun showAddProjectPrompt(project: Project, toolWindow: ToolWindow) {
+        val cm = toolWindow.contentManager
+        val panel = JPanel(VerticalLayout(10))
+        panel.border = BorderFactory.createEmptyBorder(20, 20, 20, 20)
+        val button = JButton("Add Bitbucket repo")
+        button.addActionListener { addProject(project, toolWindow) }
         panel.add(button)
-        panel.add(messageField)
-        wrapper.add(panel, BorderLayout.NORTH)
-        return wrapper
+        addTab(cm, panel, "myBitbucket")
+    }
+
+    // On a successful save, the empty-state placeholder tab is torn down and replaced with the
+    // real PR tabs — the only path that ever builds them.
+    private fun addProject(project: Project, toolWindow: ToolWindow) {
+        val discovery = discoverRemoteAndCredentials(project, existing = null)
+        val dialog = AddProjectDialog(project, existing = null, discovered = discovery.discovered,
+                detectedCredentials = discovery.credentials, storedSecret = discovery.storedSecret,
+                cloudSignedIn = discovery.cloudSignedIn)
+        if (dialog.showAndGet()) {
+            toolWindow.contentManager.removeAllContents(true)
+            showConfiguredContent(project, toolWindow)
+        }
+    }
+
+    // Tabs and listeners already exist from the one showConfiguredContent() call — reconfiguring
+    // only persists the new Settings/credential and restarts the poll, no tab rebuilding.
+    private fun reconfigure(project: Project) {
+        val existing = project.getService(Storer::class.java)!!.settings
+        val discovery = discoverRemoteAndCredentials(project, existing = existing)
+        val dialog = AddProjectDialog(project, existing = existing, discovered = discovery.discovered,
+                detectedCredentials = discovery.credentials, storedSecret = discovery.storedSecret,
+                cloudSignedIn = discovery.cloudSignedIn)
+        if (dialog.showAndGet()) {
+            project.getService(UpdateTaskHolder::class.java).scheduleNew()
+        }
+    }
+
+    // Plain data class, not a Triple — cloudSignedIn made a fourth field necessary.
+    private data class DiscoveryResult(val discovered: DiscoveredRemote?, val credentials: Credentials?,
+                                        val storedSecret: String?, val cloudSignedIn: Boolean)
+
+    // Fast EDT-safe discovery, then off-EDT lookups under one modal progress: a saved git
+    // credential, [existing]'s already-saved secret, and (Cloud only) whether an OAuth token is
+    // already stored.
+    // docs: Basic Auth, Adding Bitbucket Cloud support
+    private fun discoverRemoteAndCredentials(project: Project, existing: Settings?): DiscoveryResult {
+        val discovered = discoverRepositoryUrl(project)
+        var credentials: Credentials? = null
+        var storedSecret: String? = null
+        var cloudSignedIn = false
+        val scheme = discovered?.scheme
+        val gitRoot = discovered?.gitRoot
+        // Cloud never reuses a git credential — that's a git username+token, not the email+API
+        // token Cloud's REST API wants. docs: Adding Bitbucket Cloud support
+        val tryGitCredentials = scheme != null && gitRoot != null && discovered?.cloud != true
+        if (tryGitCredentials || existing != null) {
+            ProgressManager.getInstance().runProcessWithProgressSynchronously({
+                if (tryGitCredentials) {
+                    credentials = GitCredentialHelper.tryFill(project, gitRoot!!, scheme!!, discovered!!.host)
+                }
+                if (existing != null) {
+                    storedSecret = CredentialStore.hostAuthorityFor(existing.url)
+                            ?.let { CredentialStore.read(it) }?.getPasswordAsString()
+                    if (existing.cloud) {
+                        cloudSignedIn = CloudOAuth.stored() != null
+                    }
+                }
+            }, "Checking for Saved Credentials", true, project)
+        }
+        return DiscoveryResult(discovered, credentials, storedSecret, cloudSignedIn)
     }
 
     private fun addTab(contentManager: ContentManager, component: JComponent, tabName: String): Content {

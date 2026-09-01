@@ -9,13 +9,11 @@ import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.ScrollPaneConstants
 
-// Model is a per-project service (see Model.kt) — fetched once here and closed over, so every
-// PRComponent this panel creates acts on the right project's data, never an ambient guess.
+// docs: Per-project state
 fun createReviewPanel(project: Project): Panel {
     val model = project.getService(Model::class.java)
-    // Read lazily, not captured: the username arrives with the first poll's response, which can be
-    // after this panel is built. Until then every pull request reads as needing attention, so
-    // nothing is hidden or reordered.
+    // Read lazily, not captured — the username can arrive after this panel is built; until then
+    // every PR reads as needing attention.
     val currentUser = project.getService(CurrentUser::class.java)
     return object : Panel(attentionOf = { pr -> pr.attentionFor(currentUser.name) }) {
         override fun createPRComponent(pr: PR): PRComponent {

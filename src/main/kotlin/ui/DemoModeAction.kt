@@ -4,8 +4,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 
-// Not added to any menu or toolbar in plugin.xml — reachable only via Find Action
-// (Cmd/Ctrl+Shift+A), search "myBitbucket" or "demo". See CLAUDE.md "Demo mode".
+// Reachable only via Find Action (Cmd/Ctrl+Shift+A) — not in any menu/toolbar. docs: Demo mode
 class DemoModeAction : AnAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 

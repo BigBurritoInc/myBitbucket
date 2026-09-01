@@ -1,6 +1,6 @@
-import bitbucket.BitbucketClient
 import bitbucket.ClientListener
 import bitbucket.CurrentUser
+import bitbucket.server.BitbucketServerClient
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import http.BasicAuthRequestFactory
@@ -17,7 +17,7 @@ object Runner {
         settings.url = args[2]
         settings.project = args[3]
         settings.slug = args[4]
-        val client = BitbucketClient(
+        val client = BitbucketServerClient(
                 HttpClients.createDefault(),
                 BasicAuthRequestFactory(args[0], args[1]),
                 settings,

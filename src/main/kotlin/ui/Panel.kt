@@ -9,12 +9,9 @@ import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
 
-/**
- * @param attentionOf how much of the user's attention each pull request still wants. Drives both the
- *        display order (whatever needs doing first, approved last) and which ones collapse behind
- *        the "Show already approved" button. The Created list has no reviewing angle, so it leaves
- *        the default and every pull request sits in one bucket, ordered by recency alone.
- */
+/** @param attentionOf how much attention each PR still wants — drives display order (whatever
+ *  needs doing first, approved last) and the "Show already approved" collapse. The Created list
+ *  leaves the default: one bucket, ordered by recency. */
 abstract class Panel(
         private val attentionOf: (PR) -> ReviewAttention = { ReviewAttention.NEEDS_ATTENTION }
 ) : JPanel(), Listener {
@@ -22,8 +19,8 @@ abstract class Panel(
         const val GAP_BETWEEN_PR_COMPONENTS = 5
     }
 
-    // The list is its own model rather than reading state back off the child components: hidden pull
-    // requests have no component at all, and the footer button isn't a PRComponent either.
+    // Its own model, not read back off the child components — hidden PRs have no component, and
+    // the footer button isn't a PRComponent either. docs: Fetching pull requests
     private val prs: MutableList<PR> = ArrayList()
 
     // Tracked at the list level, not on PRComponent: components get discarded/recreated on refresh.
@@ -50,9 +47,9 @@ abstract class Panel(
     private fun rebuild() {
         synchronized(treeLock) {
             removeAll()
-            // sortedBy is stable, so within a bucket the insertion order — newest first — survives.
-            // Sorting the whole list rather than the visible part is what keeps the order steady when
-            // the approved ones are revealed: they append to the end instead of interleaving.
+            // sortedBy is stable (newest-first survives within a bucket). Sorting the whole list,
+            // not just the visible part, keeps order steady when approved ones are revealed.
+            // docs: Fetching pull requests
             val ordered = prs.sortedBy { attentionOf(it).ordinal }
             val (hidden, alwaysVisible) = ordered.partition { attentionOf(it) == ReviewAttention.APPROVED }
             val visible = if (showHidden) ordered else alwaysVisible

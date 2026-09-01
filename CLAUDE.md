@@ -4,6 +4,27 @@ Kotlin IntelliJ IDEA plugin. Source code comments are kept minimal by design —
 the "why" that would otherwise bloat inline comments. Read the relevant section before touching
 the area it covers.
 
+**Comment length rule**: an inline code comment must fit in 1–3 lines. If it needs more than
+that, trim it to a 1–3 line pointer and put the full explanation in the matching section of this
+file instead — add a new section if none fits.
+
+**Pointer format**: point to that section with its own tag line, not prose woven into the
+explanation. Last line of the comment, `// docs: <section>` (`* docs: <section>` inside a KDoc
+block); more than one section is `// docs: <section>, <section>`. Not "See CLAUDE.md "X"." inline
+— that reads as part of the explanation to a human skimming the comment, competing for attention
+with the actual reason, instead of as a skippable footnote the way a `TODO:` tag is. For example:
+
+```kotlin
+// Truncated so a long comment doesn't blow up an Inbox row.
+// docs: Inbox
+```
+
+```kotlin
+/** Caches each PR's merge status between polls.
+ * docs: Fetching pull requests
+ */
+```
+
 ## Versioning
 
 Bump `version` in `build.gradle` on every change intended for reinstall: IntelliJ's "Install
@@ -150,24 +171,31 @@ tends to touch unrelated platform code paths and trade one crash for another (se
 
 ## Per-project state
 
-`Model`, `UpdateTaskHolder`, `DemoMode`, and the Settings page (`BitbucketHelperConfigurable`) are
-all project-scoped — one instance per open IDE project (`@Service(Service.Level.PROJECT)` light
-services for the first three; `<projectConfigurable>` in plugin.xml for the last), not shared
-globals. Each gets its `Project` via constructor injection instead of guessing it. `Git.kt`'s VCS
-operations (`checkoutBranch`/`currentBranch`) take `Project` as an explicit parameter for the same
-reason. This replaced an earlier all-global design (`object Model`, `object UpdateTaskHolder`, a
-shared `lateinit var currentProject`, `getStorerService()`'s `DataManager`/`ProjectManager`
-guessing) that worked fine with one project open and broke with more than one: every open project
-shared the same PR list, the same poll loop, and the same ambiently-guessed project for checkout,
-so all windows ended up showing whichever project's data was guessed most recently. See "Known
-incidents" below for that history.
+`Model`, `UpdateTaskHolder`, `DemoMode`, and `CurrentUser` are all project-scoped — one instance
+per open IDE project (`@Service(Service.Level.PROJECT)` light services, no plugin.xml
+registration needed), not shared globals. Each gets its `Project` via constructor injection
+instead of guessing it. `Git.kt`'s VCS operations (`checkoutBranch`/`currentBranch`) take
+`Project` as an explicit parameter for the same reason, and so does `ui/AddProjectDialog.kt` and
+the `discovery`/`credentials` helpers it calls — there is no per-project `Configurable` any more
+(see "Basic Auth"), but the same "always be told the project, never guess it" rule still applies
+to whatever replaces it. This replaced an earlier all-global design (`object Model`, `object
+UpdateTaskHolder`, a shared `lateinit var currentProject`, `getStorerService()`'s
+`DataManager`/`ProjectManager` guessing) that worked fine with one project open and broke with
+more than one: every open project shared the same PR list, the same poll loop, and the same
+ambiently-guessed project for checkout, so all windows ended up showing whichever project's data
+was guessed most recently. See "Known incidents" below for that history.
 
 ## Domain model vs wire format
 
 `domain.PR` / `domain.Participant` / `domain.MergeStatus` are what the whole plugin above the client
-works in. They carry no Jackson annotations and no Bitbucket flavour. The wire format lives in
-`bitbucket.server.dto` and is mapped across by `bitbucket.server.ServerDtoMapper` at the client's
-edge — `BitbucketClient` is the only class that sees both.
+works in. They carry no Jackson annotations and no Bitbucket flavour. Each flavour maps its own wire
+format across at the client's edge: `bitbucket.server.dto` via `bitbucket.server.ServerDtoMapper` for
+Server, `bitbucket.cloud.dto` via `bitbucket.cloud.CloudDtoMapper` for Cloud. `BitbucketServerClient`
+and `BitbucketCloudClient` are the only two classes that see both a DTO package and the domain types
+— each is the sole class for its own flavour's DTOs, never the other's. Both implement the
+`BitbucketClient` interface (`bitbucket/BitbucketClient.kt`), which is what the rest of the plugin —
+`Model`, `UpdateTaskHolder` — actually depends on; see "Adding Bitbucket Cloud support" below for how
+`BitbucketClientFactory` picks between them.
 
 This exists because Bitbucket Server and Bitbucket Cloud disagree on nearly every field, and on some
 concepts entirely. The one that forced the split: **Cloud pull requests have no `version`.** Server
@@ -193,6 +221,180 @@ Other things the mapping absorbs, and which a Cloud mapper will have to absorb d
 **Rule: no DTO type may appear outside `bitbucket.**`.** If a UI class needs something new from a
 pull request, add it to the domain and map it, rather than passing the DTO through — that's the
 whole point of the split.
+
+## Adding Bitbucket Cloud support
+
+Implemented: `Settings.cloud` (`ui/Settings.kt`) — a new field, not a rename, default `false` so a
+pre-Cloud `workspace.xml` still deserializes to Server — is the one thing `BitbucketClientFactory.
+createClient` branches on, building a `bitbucket.cloud.CloudBitbucketClient` instead of a
+`BitbucketServerClient`. `Settings.project`/`slug`/`login` are reused as-is rather than growing
+Cloud-specific twins: `project` holds the workspace, `slug` the repo slug, `login` the account
+email — same reasoning as keeping `project` named `project` at all (see below), and it means
+`Settings`/`Storer`/`CredentialStore` needed no changes beyond the one new field.
+
+`ui.parseAnyRepositoryUrl` (`ui/Settings.kt`) tries the Cloud shape (`bitbucket.org/{workspace}/
+{repo_slug}`) first — the host is unambiguous — then falls back to the Server shape (`.../projects/
+{X}/repos/{Y}`); `reconstructRepositoryUrl` does the inverse. `discovery.GitRemoteDiscovery.
+parseCloneUrl` special-cases `host == "bitbucket.org"` before the Server-shaped `HTTP_PATH_PATTERN`/
+`SSH_PATH_PATTERN` regexes — needed because Cloud's ssh clone URLs (`git@bitbucket.org:workspace/
+repo.git`) have the same two-segment shape those regexes already matched, so without the special
+case a Cloud ssh remote would have been silently misread as a Server one, producing a garbage
+`.../projects/workspace/repos/repo` URL. `ui.AddProjectDialog` shows a different auth section per
+flavour — Server's existing three-way group (detected Git credentials / Basic Auth / Access Token)
+vs. Cloud's plain Email + API Token fields — decided live off `parseAnyRepositoryUrl(repoUrlField.
+text)?.cloud`, not fixed at dialog-open, so pasting a URL of the other flavour mid-edit switches the
+visible fields via a `DocumentListener` rather than requiring the dialog to be reopened. Cloud never
+tries `credentials.GitCredentialHelper`: a saved git credential for `bitbucket.org` is a Bitbucket
+username + token meant for git operations, not the email + API token Cloud's REST API wants, and
+reusing one for the other would silently save the wrong credential.
+
+`bitbucket.cloud.dto.PullRequestDto` and friends are Cloud's wire format — deliberately not unified
+with `bitbucket.server.dto`, per "Domain model vs wire format" above. `bitbucket.cloud.
+CloudDtoMapper` maps them into `domain` types, same role as `ServerDtoMapper`. Two mapping notes
+worth knowing before touching this: Cloud has no `version` counter, so `PR.revision` is the parsed
+`updated_on` timestamp instead (Server's mapper uses the real counter — see "Domain model vs wire
+format"); and Cloud's author isn't itself a full participant record the way Server's is, so the
+mapper looks the author up inside `participants` by `uuid` for a real approved/status answer instead
+of hardcoding `UNAPPROVED`. Timestamps are parsed as `String` via `java.time.OffsetDateTime.parse`
+rather than through Jackson's default date handling — Cloud's microsecond precision
+(`"...000000+00:00"`) isn't safely covered by Jackson's `StdDateFormat`, and there is no compiler
+here to catch a mismatch if it were.
+
+`bitbucket.cloud.CloudBitbucketClient` fetches with `q=state="OPEN"` (no author/reviewer filter) and
+reuses `bitbucket.partitionPRs` exactly like `BitbucketServerClient` does — deliberately, rather than
+issuing two separately-filtered queries, since it gets the "a self-reviewed PR appears in both lists"
+behavior for free from code that already exists. Pagination follows Cloud's own `page`/`pagelen`/
+`next` shape (`bitbucket.cloud.dto.PageDto`, kept separate from Server's `start`/`limit`/
+`isLastPage`/`nextPageStart` one) — `next` is already a complete URL for the following page, so
+unlike Server's replay there's no query-param reconstruction between pages, just following the link
+until it's absent. Approve and merge are bodyless/near-bodyless POSTs, simpler than Server's.
+
+**Current user**: Cloud has no `X-AUSERNAME`-style header — `BitbucketCloudClient` resolves the
+current user with one explicit `GET /2.0/user` call, caches the returned `uuid` for the client
+instance's lifetime (same "one probe per client, recreated each reschedule" pattern as Server's
+`probeCurrentUser`), and uses that `uuid` everywhere the rest of the plugin compares a PR's
+author/reviewers against "me" — Cloud has no stable "username" any more, only opaque ids. This does
+**not** go through the shared per-project `CurrentUser` service (see "Per-project state"); that
+service's whole job is capturing a response header Cloud doesn't send, so Cloud keeps its own
+resolution local instead of stretching that service to cover a concept it doesn't have. A Cloud
+personal **API token** — the credential type this plugin uses — can call `GET /2.0/user` fine, given
+the `read:user:bitbucket` scope; a Community report of that endpoint rejecting a token turned out to
+be about Bitbucket's separate Repository/Project/Workspace *Access Tokens*, a bot-identity-bound
+credential family this plugin doesn't use — worth knowing before treating that report as a blocker.
+
+**Merge status is a deliberate gap, not a missing feature**: Bitbucket Cloud has no public,
+documented endpoint for merge-conflict status (checked against several Community threads asking the
+same question over multiple years, not assumed) — `CloudBitbucketClient.retrieveMergeStatus` always
+returns an optimistic `canMerge = true, known = true`, so the Merge button stays enabled for Cloud
+PRs and a real conflict surfaces as a failed merge attempt instead of being predicted up front. The
+alternative — Bitbucket's undocumented internal API — was deliberately not used; see "DTOs are not
+unified" and the "don't force a symmetric interface" reasoning above, which both argue for
+Cloud-native gaps staying gaps rather than being paved over with something unstable.
+
+Still Server-only, out of scope for this pass: diff, comments, tasks, attachments — nothing above
+the client asks for any of these yet, so there was nothing to add. `Settings.project` stays named
+`project` rather than becoming something flavour-neutral like `namespace`: Cloud's equivalent is a
+workspace, not a project, but renaming the field would hit the exact silent-data-loss bug class
+described in "Basic Auth" below ("Migrating a pre-0.6 install") — the platform's XML deserializer
+drops a saved property that no longer matches the class instead of erroring, so a renamed field
+would quietly lose every existing user's repository binding on upgrade. `Settings.cloud` is the
+add-new-field/migrate-once pattern `accessToken` → `CredentialStore` used, applied here instead.
+
+**Auth note**: Bitbucket Cloud's old "app passwords" were fully retired (final removal July 28,
+2026), and their replacement — Cloud API tokens, which this plugin originally used over plain
+Basic Auth — has itself since been discontinued: a personal, non-org-managed Bitbucket account has
+no "create an API token" affordance left. What account settings calls "App authorizations" is not
+a replacement token mechanism — it's just the list of OAuth apps already granted access, not a way
+to mint one. The actual replacement is Bitbucket Cloud's OAuth 2.0 Authorization Code grant — see
+"Bitbucket Cloud OAuth sign-in" below for the full design. `AddProjectDialog`'s old Email/API Token
+fields and their `BasicAuthRequestFactory` wiring are gone for Cloud entirely; Server's Basic
+Auth/Access Token paths are untouched.
+
+**No compiler here, and no Cloud test workspace yet** (unlike the mechanical interface-extraction
+step before this one): this was written and statically reviewed — full-file re-reads, brace/paren
+balance checks, cross-checked field names against Atlassian's live docs and Community threads — but
+not run against a real Cloud repository. Build and smoke-test on a real machine against a real
+workspace before trusting it; a wrong DTO field name or a scope Bitbucket rejects will only surface
+at runtime.
+
+## Bitbucket Cloud OAuth sign-in
+
+`credentials.CloudOAuth` is the whole OAuth layer — the only place beyond one branch in
+`BitbucketClientFactory.createRequestFactory` that Cloud auth touches. That branch resolves a
+bearer token via `CloudOAuth.freshAccessToken()` and hands it to the existing
+`AccessTokenRequestFactory` unchanged — the same class Server's own Access Token mode already
+uses, since an OAuth access token is just another Bearer-header secret to that class.
+
+**Shared built-in consumer, not per-user registration**: Bitbucket Cloud's OAuth has no PKCE
+(Atlassian feature request open since Nov 2024, no ETA) and no device-authorization grant — the
+Authorization Code exchange requires a client secret, full stop. Since this is a distributed
+plugin, the alternative to embedding one shared consumer's client ID/secret would be asking every
+user to register their own OAuth consumer and paste both values in — no better than the API token
+field this replaces, arguably worse. A real published third-party Bitbucket CLI tool takes the
+same shared-built-in-consumer approach for the same reason, confirmed by reading its own auth
+setup docs. The trade-off accepted: the embedded secret is extractable from the plugin jar by
+decompiling it — inherent to any native OAuth client against a provider with no PKCE, not specific
+to this plugin's design.
+
+Researched before accepting this trade-off (not assumed): RFC 8252 §8.5 says a secret statically
+included in an app distributed to many users "should not be treated as confidential" and that
+authorization servers requiring one from a public client serves "little value beyond client
+identification" — i.e. the spec itself expects providers like Bitbucket to know this doesn't
+protect anything. GitHub has publicly confirmed it ships the same way for VS Code, Visual Studio,
+GitHub CLI and GitHub Mobile ("You cannot keep a secret 'secret' within a public client, but you
+do have to embed it there anyhow" — github.com/orgs/community/discussions/15752). A comparable
+paid Bitbucket IDE plugin (reviewed for this decision, not copied from) embeds its own client
+id/secret pair the same way, against the same `http://localhost:<port>/.../oauth` redirect
+pattern. The standards-recommended alternative — draft-ietf-oauth-v2-1 §2.1 names it explicitly —
+is a backend-for-frontend broker: the plugin would talk only to a small server we'd run, which
+holds the real secret and performs the code-for-token exchange, so the secret never ships in the
+jar at all (this is how VS Code's own GitHub sign-in and GitKraken's Git integrations work).
+Deliberately not built for this plugin: it would need standing up and maintaining a server, for a
+plugin whose worst-case exposure is bounded by its own scopes (`account:read`, `pullrequest`,
+`pullrequest:write` — no repo write, no account settings) and by Bitbucket enforcing the
+consumer's one fixed redirect URI. Revisit if the scope list ever grows to include something more
+sensitive (repo write/delete, account-level changes).
+
+**Loopback callback, not a real redirect target**: the consumer's registered Callback URL is
+`http://localhost:47829/callback` — Bitbucket does accept a localhost callback for a registered
+consumer (confirmed against a real third-party tool's own setup instructions; Atlassian's own docs
+don't say either way). `CloudOAuth.authorize()` opens a raw `java.net.ServerSocket` on that port
+rather than `com.sun.net.httpserver.HttpServer` — sidesteps any question of whether that JDK
+module is safely usable inside a real IDE's JPMS-launched process, at the cost of hand-parsing one
+HTTP request line, which is all a one-shot local callback actually needs. If port 47829 is already
+taken by something else on the machine, sign-in fails with a clear message instead of silently
+hanging — not engineered around, since Bitbucket's consumer callback appears to be one fixed URL,
+not a settable list to fall back through.
+
+**Cancellation**: a single blocking `accept()` wouldn't notice a Cancel click on the wrapping
+`ProgressManager` modal — `acceptWithCancellation` polls in ~1s bursts instead, calling
+`ProgressManager.checkCanceled()` between attempts so Cancel actually stops the wait instead of
+running out the full 5-minute timeout.
+
+**Token persistence is deferred to `doOKAction()`, not immediate on sign-in**: `authorize()`
+deliberately does not persist the bundle it returns — `AddProjectDialog` holds it in
+`pendingOAuthTokens` and only calls `CloudOAuth.store()` if the dialog is actually confirmed with
+OK, mirroring the existing "secret commits together with the rest of Settings, discarded on
+Cancel" rule Server's fields already follow. Signing in and then clicking Cancel would otherwise
+leave a token saved for a repository binding that was never actually applied.
+
+**Refresh is proactive, not reactive-only**: `freshAccessToken()` runs once per client
+construction (`BitbucketClientFactory.createRequestFactory`, i.e. roughly once per poll cycle) and
+only makes a network call once the cached access token has under two minutes left — Bitbucket
+rotates the refresh token on every use, so the newly returned one must be persisted immediately or
+the next refresh would use a dead token. A failed refresh (the refresh token itself expired after
+three months unused, or the user revoked the app's access from Bitbucket's "App authorizations"
+page) clears the stored bundle and returns null; `BitbucketClientFactory` turns that into an empty
+Bearer token, and the resulting 401 already routes through the existing
+`UpdateTaskHolder.invalidCredentials()` → "Reconfigure Bitbucket repo…" flow, so no separate error
+plumbing was needed for that path. `invalidCredentials()` itself branches on `settings.cloud` to
+clear `CloudOAuth`'s stored bundle instead of `CredentialStore`'s Basic Auth entry.
+
+**Not independently confirmed** — same "no compiler here" caveat as the rest of this file's Cloud
+work: `com.intellij.ide.BrowserUtil.browse(url: String)` for opening the system browser, and
+`com.intellij.openapi.progress.ProgressManager.checkCanceled()`'s exact behavior called from
+inside a Runnable passed to `runProcessWithProgressSynchronously`. Both are extremely standard,
+long-stable platform APIs, but verify against real source before trusting them if either misbehaves.
 
 ## Fetching pull requests
 
@@ -223,7 +425,7 @@ that silently kills the "your pull request can be merged" notification. And what
 `MAX_FETCHES_PER_CYCLE` cuts off must be left *uncached*, so the next cycle picks it up; caching a
 skipped pull request would leave it without a status until its version happened to change.
 
-`BitbucketClient.openPRs()` returns `null` for "couldn't fetch" and an empty `RepositoryPRs` for
+`ServerBitbucketClient.openPRs()` returns `null` for "couldn't fetch" and an empty `RepositoryPRs` for
 "genuinely no open pull requests", and `UpdateTask` skips the cycle on `null`. Collapsing the two is
 what used to make one failed request look like every pull request being closed, and then reopened on
 the next success — a burst of "New Pull Request is available" balloons for PRs the user already had.
@@ -252,18 +454,21 @@ any code walking `getComponent(i) as PRComponent` would break. Rebuilds are chea
 
 ## Current user
 
-`Settings.login` is always blank in production: `Configurable.apply()` sets url/project/slug/token and
-forces `useAccessTokenAuth = true`, and the Settings page has no login field at all (the Basic Auth UI
-is unreachable — see "Basic Auth"). So the username can't come from settings.
+This section is Server-specific — see "Adding Bitbucket Cloud support" above for how Cloud resolves
+the current user instead (`GET /2.0/user` → `uuid`, no header involved).
 
-It comes from the **`X-AUSERNAME` response header**, which Bitbucket puts on every authenticated
-response, captured in `BitbucketClient.sendRequest` into the per-project `CurrentUser` service. That
-costs nothing: the pull request request itself carries it, and the capture runs before the body is
-parsed, so the very first response of a cycle populates it before that cycle partitions anything.
-`BitbucketClient.probeCurrentUser()` (one `GET /rest/api/1.0/application-properties`, body discarded)
-is the fallback for a caller that runs before any poll — `approve()` from the tool window — and is
-guarded to at most once per client. `UpdateTaskHolder.createAndRun` clears `CurrentUser` so a newly
-pasted token can't inherit the previous account's identity.
+`Settings.login` is populated now — Basic Auth mode fills it from a detected or manually typed
+git credential (see "Basic Auth") — but the plugin still doesn't use it to identify the current
+user: the approve endpoint needs a Bitbucket user **slug**, not a login, and Access Token mode has
+no login at all. So the username still comes from the **`X-AUSERNAME` response header**, which
+Bitbucket puts on every authenticated response, captured in `ServerBitbucketClient.sendRequest` into the
+per-project `CurrentUser` service. That costs nothing: the pull request request itself carries it,
+and the capture runs before the body is parsed, so the very first response of a cycle populates it
+before that cycle partitions anything. `ServerBitbucketClient.probeCurrentUser()` (one `GET
+/rest/api/1.0/application-properties`, body discarded) is the fallback for a caller that runs
+before any poll — `approve()` from the tool window — and is guarded to at most once per client.
+`UpdateTaskHolder.createAndRun` clears `CurrentUser` so a newly configured credential can't
+inherit the previous account's identity.
 
 Two things to know before touching this:
 
@@ -274,6 +479,95 @@ Two things to know before touching this:
   `@` or `.`). `User.slug` is present in Bitbucket's JSON but not mapped onto `User` — if approve
   starts 404ing for someone with an email-style username, that's the reason, and mapping `slug` as a
   trailing defaulted constructor param is the fix.
+
+## Inbox
+
+A third tool-window tab, next to Reviewing and Created: a feed of new comments on your own PRs,
+replies to comments you made (even on a PR you're only reviewing), and new approvals on your own
+PRs — see `bitbucket/InboxTracker.kt`, `ui/InboxStore.kt`, `ui/InboxPanel.kt`. Built because neither
+Bitbucket flavour surfaces this inside the IDE at all; it only reaches you by email or the web UI's
+own bell icon.
+
+Neither Bitbucket Server nor Cloud has a cross-repository "what's new for me" endpoint, and neither
+has a reliable "since a timestamp" filter on the per-PR comment source — only generic offset/cursor
+paging. So `InboxTracker.detect()` fetches each tracked PR's comments in full every time it decides
+to check (see "Revision-gated" below) and filters client-side against a persisted "last seen
+comment id" (`InboxStore.inboxState.lastSeenCommentId`). Comment ordering isn't documented on
+either platform, so this pages all the way to the end and filters by id afterwards rather than
+assuming newest-first — correct either way, just not maximally efficient if the true order turns
+out to be newest-first.
+
+**Server and Cloud fetch comments completely differently — this is not a detail to genericize
+away.** Cloud's `GET .../pullrequests/{id}/comments` is a real general-comment listing: flat
+`values`, each with a `parent.id` back-reference on a reply. Server has no equivalent: its
+`GET .../pull-requests/{id}/comments` *looks* like the same thing but is actually the file/line
+comment search — it 400s ("The path parameter must be supplied") without a `path` query param, and
+shipping that call was a real incident (see "Known incidents"). Server's real general-comment feed
+is `GET .../pull-requests/{id}/activities`, filtered to `action == "COMMENTED"`; each such
+activity's `comment` has no flat `parent` field either — a reply lives nested inside its parent's
+own `comments` array, arbitrarily deep. `ActivityCommentDto.toDomainTree()` (`ServerDtoMapper.kt`)
+walks that tree and derives each `domain.Comment.parentCommentId` from the nesting itself. This
+also sidesteps a question the public docs don't answer — whether a reply gets its own `activities`
+entry or only shows up nested under its thread's original entry — since every fetch walks the
+*current* full tree of every `COMMENTED` activity's `comment`, on every page, rather than trying to
+diff activity-level ids.
+
+**Revision-gated, not polled on a timer.** A PR's comments are only re-fetched when
+`PR.revision` has advanced past `InboxStore.inboxState.lastCheckedRevision[pr.id]` — the same
+signal `ui/PRState.kt` already diffs on, reused independently here. A steady PR costs zero extra
+requests. This matters more for Cloud, which caps authenticated REST use at 1,000 requests/hour/user
+across `/2.0/repositories/**`; Server/DC is self-hosted and has no such ceiling, but the gate
+applies to both uniformly rather than branching behavior on `Settings.cloud`.
+
+**Own PRs get blanket coverage; PRs you're only reviewing get targeted coverage.** Any new comment
+on your own PR is a `NEW_COMMENT` event — including a reply to a comment you left there, so there's
+no separate REPLY check for your own PRs. On a PR you're only reviewing, only a reply to a comment
+you specifically made becomes a `REPLY` event; a generic new top-level comment from someone else is
+deliberately not surfaced — reviewing a PR isn't an invitation to every comment on it. Approvals
+need no extra API call at all: `domain.PR.reviewers` (with `approved`/`status`) already arrives on
+the pull-requests list call `UpdateTaskHolder` makes every poll, so `InboxTracker.checkApprovals`
+just diffs it against a persisted snapshot (`InboxStore.inboxState.lastApprovals`).
+
+**A PR seen for the first time seeds state and emits nothing.** Without this, starting to review a
+PR with 40 existing comments, or the very first poll after installing the plugin, would flood the
+Inbox with everything that PR has ever had. `firstSeen` (no stored `lastCheckedRevision` entry for
+that PR id) is checked before emitting any event, though the comment/approval snapshot is still
+recorded so the next poll has a correct baseline to diff against.
+
+**Replies to an older, already-paged-past comment still resolve.** A reply's parent comment may
+have been fetched (and excluded by the `sinceCommentId` filter) on an earlier poll, so "is this a
+reply to me" can't rely only on the current poll's fetch batch. `InboxStore.inboxState.myCommentIds`
+(PR id → ids of comments the current user authored) is built up incrementally across every poll,
+including the first-seen seeding fetch, and is what `checkReviewingPR` actually checks
+`parentCommentId` against.
+
+**User comparison is case-insensitive**, via the same `String.sameUserAs` extension
+`bitbucket/PRQuery.kt` already uses for own/reviewing partitioning — Server's `X-AUSERNAME` casing
+need not match a comment or reviewer payload's casing on LDAP-backed instances. Comparing with `==`
+here would silently misattribute your own comments/approvals as someone else's on such instances.
+`BitbucketClient.currentUserIdentifier()` (Server: username; Cloud: uuid, see "Adding Bitbucket
+Cloud support" above) is what every comparison here is against — resolved the same way `openPRs()`
+already resolves it, so this costs no extra request.
+
+**Deliberately public-API-only.** The paid competitor plugin's own notification centre carries a
+`use.cloud.internal.api.fallback` flag that falls back to an undocumented internal Bitbucket web API
+(via a harvested browser-session cookie) when the public REST API can't do something. This feature
+does not do that — every fetch here is the same documented `/rest/api/1.0/...`/`/2.0/...` surface
+the rest of the plugin already uses.
+
+Persistence is `ui/InboxStore.kt`, the same `PersistentStateComponent` pattern as `Storer`/
+`Settings` (`@State`, `WORKSPACE_FILE` storage, registered in plugin.xml as a `<projectService>`) —
+read/unread state and every "last seen" watermark survive an IDE restart, and nothing gets replayed
+as "new" just because the IDE reopened. The persisted property is named `inboxState`, not `state` —
+see "Known incidents" for why that name matters, not just style. `recordEvents` dedupes by
+`InboxEvent.id` (`"$prId:comment:$commentId"` / `"$prId:approval:$userName"` — stable across polls)
+and caps stored history at 200 events; `pruneClosedPRs` keeps the watermark maps proportional to
+currently-tracked PRs instead of growing forever as PRs close over a long session.
+
+The balloon notification on a new event is off by default — `Settings.inboxNotificationsEnabled`,
+toggled from the tab's own header checkbox, round-tripped by `Storer` like every other `Settings`
+field. Off or on, the tab's badge count and row list always update; the setting only gates the extra
+balloon via `Model.publishInboxEvents`.
 
 ## Avatars
 
@@ -301,14 +595,91 @@ invoking it again switches back to real data (`DemoMode.kt`).
 
 ## Basic Auth
 
-Access Token is the only auth method exposed in the Settings UI (`ui/Configurable.kt`) and the
-tool window (`MainWindow.kt`'s Login tab is not added). Basic Auth itself
-(`Settings.login`/`useAccessTokenAuth`, `http/BasicAuthRequestFactory.kt`,
-`MainWindow.createLoginPanel()`) is left in place, fully functional, just unreachable from the
-UI — don't delete it without being asked.
+There is no Settings page any more (`ui/Configurable.kt` is deleted). A project starts
+unconfigured and the tool window shows one "Add Bitbucket repo" button
+(`MainWindow.showAddProjectPrompt`) — named to be clearly about the Bitbucket-side configuration,
+not the local git repository — until a repository is bound to it. Clicking it — or the tool
+window gear's "Reconfigure Bitbucket repo…" on an already-configured project — runs
+`discovery.discoverRepositoryUrl` against the project's own git remotes to guess the repository
+URL, and, for an http(s) remote, shells out to `git credential fill`
+(`credentials.GitCredentialHelper`) to see whether the system's own git credential helper (OS
+keychain, Git Credential Manager, ...) already has something saved for that host.
+`ui/AddProjectDialog.kt` opens pre-filled with whatever was found; the user can accept it, edit
+it, or switch to the other auth mode (Basic Auth vs. HTTP Access Token) and type it by hand —
+picking a mode is never gated on detection having found something for it, only the initial
+selection and pre-fill are (an earlier version disabled the Basic Auth radio button whenever
+nothing was auto-detected, which left no way to sign in that way by hand — an ssh remote, no
+`credential.helper` configured, or the helper process failing all hit this).
+
+Whichever secret is obtained is written to **PasswordSafe** (`credentials.CredentialStore`), keyed
+by server host[:port] rather than by repository — reconfiguring a different repository on a server
+already signed into reuses what's saved instead of asking again. `Settings` itself (`ui/Settings.kt`,
+still `PersistentStateComponent`/`workspace.xml`) never carries a secret any more — this fixes
+Access Token's old plaintext-on-disk storage too, not just Basic Auth's.
+`BitbucketClientFactory.createRequestFactory` reads the secret back from `CredentialStore` fresh on
+every client build rather than caching it anywhere. A real 401
+(`HttpResponseHandler.UnauthorizedException`) clears the stored secret
+(`UpdateTaskHolder.NotifyingClientListener.invalidCredentials()`), so a later reconfigure doesn't
+silently keep offering a credential already known to be dead.
+
+Reconfiguring with the password/token field left blank deliberately **keeps whatever secret is
+already saved** rather than clearing it, *as long as the auth mode being saved matches the one
+already configured* — a brand new "Add Bitbucket repo" always requires one, and so does a
+"Reconfigure" that switches auth mode (`AddProjectDialog.doValidate`). That second case matters
+because `CredentialStore` is keyed by host, not by auth mode: the secret already saved under that
+key when switching modes belongs to the *other* mode (e.g. an Access Token, while this save is
+turning on Basic Auth). Blank used to be accepted there too, which meant switching modes with the
+new field left empty silently kept authenticating with the old mode's secret — surfacing only as a
+confusing "Invalid Bitbucket credentials" with no obvious cause, since URL/login all looked right.
+Requiring the secret in that case is what closes it; leaving it optional the rest of the time is
+what makes reconfigure re-running discovery + `git credential fill` actually useful — if nothing
+new turns up, the user shouldn't have to retype a still-valid secret just to fix, say, a typo in the
+repository URL.
+
+`UpdateTaskHolder.scheduleNew()`/`reschedule()` dispatch onto a background executor rather than
+running inline on the caller's thread now, because building a client means a `CredentialStore`
+(PasswordSafe) read — blocking IO that must never run on the EDT. Tradeoff: `stop()` can now race a
+`scheduleNew()`/`reschedule()` call made just before it that hasn't materialized into a task yet,
+which would overwrite the `DummyTask` `stop()` just installed. Fine today — `DemoMode.enable()` is
+the only `stop()` caller, and it's never invoked back-to-back with a schedule call — but worth
+checking again before adding a new `stop()` caller.
+
+**Migrating a pre-0.6 install.** Before 0.6, the only auth method reachable from the UI was Access
+Token, and it was persisted in plaintext as `Settings.accessToken` in `workspace.xml`. 0.6 removed
+that field from `Settings` — but the platform's default XML deserializer silently drops a saved
+property that no longer exists on the class instead of erroring, so upgrading a configured project
+with nothing else done here would leave it newly, silently unable to authenticate ("Invalid
+Bitbucket credentials", no obvious cause since URL/project/slug all still load fine). Fixed by
+keeping `Settings.accessToken` around as a legacy-only field — same name, so old XML still matches
+it — that only `BitbucketClientFactory.migrateLegacySecretIfNeeded` ever reads: the first time a
+request factory is built after upgrading, a non-blank value is copied into `CredentialStore` and
+the field is cleared, so it's a one-time move rather than a second, parallel place secrets live.
+Nothing else may read or write `Settings.accessToken` — in particular `copyFrom`/`AddProjectDialog`
+don't touch it, so reconfiguring before the migration has run can't wipe it out from under it.
+
+This only helps a project that jumps straight from a pre-0.6 build to one that already has this
+migration. A project that was ever opened under the unreleased, un-fixed 0.6 build first has
+already lost the plaintext token for good by the time a later build runs: IntelliJ's XML
+deserializer silently drops the unknown `accessToken` property on load (that's the whole bug),
+and the very next time that project's state is saved — which routinely happens just from having
+the project open — `workspace.xml` is rewritten without it, for good. There is nothing in this
+codebase that can recover a value that no longer exists anywhere on disk; the only fix for a
+project already in that state is to re-enter the secret once via "Reconfigure Bitbucket repo…".
 
 ## Known incidents (for context on defensive-looking code)
 
+- **`InboxStore`'s persisted property was named `state`.** Kotlin auto-generates a `getState()`
+  accessor for a property named `state`, which collided at the JVM level with the explicit
+  `override fun getState(): InboxState` `PersistentStateComponent` requires — `compileKotlin`
+  failed with "Platform declaration clash". `Storer` next to it avoids the same trap by naming its
+  property `settings`; `InboxStore` now names its `inboxState` for the same reason.
+- **The Inbox feature's first Server implementation called `GET .../pull-requests/{id}/comments`,
+  copying the shape of the working Cloud endpoint of the same name.** On Server that path is the
+  file/line comment search, not a general-comment listing, and 400s ("The path parameter must be
+  supplied") without a `path` query param — every poll on every PR under review threw. Server's
+  real general-comment source is `GET .../pull-requests/{id}/activities`; see "Inbox" above for why
+  its reply model (a nested `comments` tree, no flat `parent` field) is also different from Cloud's,
+  and don't assume the two flavours' comment endpoints are shaped alike again.
 - **The old `getStorerService()` ambient-project guessing** (`DataManager`/`ProjectManager`
   focused-window lookups, now deleted) went through three rounds of bugs — a startup NPE (0.7.2),
   an EDT-assertion crash from a background poll, and silently showing one project's PR list in
@@ -327,6 +698,13 @@ UI — don't delete it without being asked.
   on the next successful poll by "every pull request is new" — one dropped request produced a burst
   of balloons. Anything feeding `Model` must distinguish "couldn't fetch" from "nothing there";
   `openPRs()` returns `null` for the former.
+- **`git4idea.GitVcs cannot be cast to git4idea.GitVcs`.** `Git.gitVcs()` used to cast
+  `VcsUtil.getVcsFor(project, baseDir)`'s result to `GitVcs` unconditionally. A runtime dependency
+  declared directly on this module (instead of registered through `plugin.xml`) let git4idea's
+  classes load twice, under two different classloaders, so the same class name failed its own `is`
+  check. Fixed by declaring plugin dependencies through `plugin.xml` rather than the module's own
+  runtime classpath; `gitVcs()` still checks `vcs is GitVcs` defensively rather than casting
+  unconditionally, as a reminder not to reintroduce the direct dependency.
 - **`service<T>()`** (the Kotlin inline extension from `com.intellij.openapi.components`, used
   in `Configurable.kt`/`MainWindow.kt` to fetch `Storer`) gets inlined into the *caller's* bytecode
   at compile time, internal-helper calls and all. Compiling against a newer platform SDK than a
@@ -343,3 +721,60 @@ UI — don't delete it without being asked.
   `GitFetcher.fetchRootsAndNotify(...)` threw `NoSuchMethodError` at runtime on a user's real,
   newer IDE. See "Verifying IntelliJ Platform APIs" above — this is the incident that motivated
   checking real platform source before relying on an API's continued existence.
+- **A wrong Basic Auth password crashed the poll instead of showing "Invalid Bitbucket
+  credentials".** `RequestFactory` always adds its own preemptive `Authorization` header, so
+  Apache HttpClient's own challenge/response auth handling was never meant to run — but
+  `BitbucketClientFactory.createHttpClient()` still built the client via
+  `HttpClients.createSystem()`, which leaves that handling on by default. A real 401 whose
+  response carries a `WWW-Authenticate: Basic` challenge (routine for a Basic Auth failure,
+  unlike most Access Token failures) made Apache try to resolve credentials itself via
+  `SystemDefaultCredentialsProvider`; finding none registered (we only ever set the header, never
+  Apache's own `CredentialsProvider`), it fell through to the JVM's `Authenticator` — landing in
+  a long-standing IntelliJ platform bug there that throws a `NullPointerException`
+  (`PlatformJdkProxyProvider$authenticator$1.getPromptedAuthentication`) instead of ever handing
+  the 401 back to us. Fixed by disabling Apache's own auth handling
+  (`RequestConfig.setAuthenticationEnabled(false)`) on the client, since it was always redundant
+  with the header we already send — now a real 401 reaches `HttpResponseHandler` and produces the
+  intended "Invalid Bitbucket credentials" notification instead of an uncaught crash, for either
+  auth mode.
+
+- **`CloudBitbucketClient.currentUserUuid()` latched a failed probe as permanent.** It set a
+  `probedForCurrentUser` flag before the `GET /2.0/user` call and never cleared it, including on
+  failure — so the first 403 (an OAuth token missing the `account` scope, in the field) or any
+  other transient error disabled user resolution for that client's entire lifetime, which spans
+  every poll until the next reconfigure/IDE restart. Every subsequent poll logged "Cannot tell
+  which Bitbucket user the credentials belong to; skipping this update" forever, with no way to
+  self-heal even after the underlying problem was fixed. Only success is cached now; failure is
+  retried every call, backed off by `UpdateTaskHolder`'s normal poll interval like any other
+  no-change cycle. `HttpResponseHandler` also now logs a 401/403 response's body (bounded, best
+  effort), since Bitbucket's own error message is usually more specific than the status code —
+  that's what actually confirmed the `account`-scope theory above. Separately, this probe now
+  passes its own no-op `ClientListener` instead of the shared one: a background probe retried
+  every poll must not fire `actionForbidden()`'s balloon every cycle the way a real forbidden
+  user action should — `openPRs()`'s existing `currentUserUnknown()` (already deduped to one
+  notification) is the right place for that.
+- **A cancelled Bitbucket Cloud sign-in left the "Reconfigure" dialog looking alive but inert.**
+  `CloudOAuth.acceptWithCancellation()` and `AddProjectDialog.signIntoCloud()` each caught
+  `Exception` around the code that polls `ProgressManager.checkCanceled()`, which also catches
+  `ProcessCanceledException` and converts it into an ordinary `AuthorizationException` — exactly
+  the platform's own progress/modal machinery is built to expect PCE to escape unmodified when a
+  process is cancelled (e.g. by closing the OAuth browser tab, or Cancel on the modal progress).
+  Swallowing it instead left that bookkeeping out of sync: the dialog's OK/Cancel buttons stayed
+  visually enabled but stopped responding to clicks, and the only way out was a second sign-in
+  attempt succeeding. Fixed by letting PCE propagate through both call sites unmodified.
+
+- **`MainWindow` (the `ToolWindowFactory`) stored `project`/`window`/`reviewingContent`/
+  `ownContent`/`inboxContent` as instance fields, set in `createToolWindowContent()`.** The
+  platform shares one `ToolWindowFactory` instance across every open project — that's exactly why
+  `createToolWindowContent(project, toolWindow)` takes both as parameters — so opening a second
+  project overwrote the first project's fields on the same shared instance. `reconfigure()` and
+  `addProject()` read `this.project` instead of a parameter, so with two projects open,
+  "Reconfigure Bitbucket repo…" clicked from either project's gear menu could end up reading and
+  overwriting *whichever* project's `Storer` happened to be cached most recently — one project's
+  settings change silently applying to the other. The tab-count listener had the milder version of
+  the same bug: `ownContent`/`reviewingContent`/`inboxContent` could point at the wrong project's
+  `Content` by the time a count changed. Fixed by removing every instance field — `project` and
+  `toolWindow` are now threaded through as explicit parameters on every private method, and
+  `reviewingContent`/`ownContent`/`inboxContent` are locals closed over only by that one
+  `showConfiguredContent()` call's own listeners, matching the "always be told the project, never
+  guess (or cache) it" rule "Per-project state" above already called for.

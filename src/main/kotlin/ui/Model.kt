@@ -3,6 +3,7 @@ package ui
 import Git
 import VCS
 import bitbucket.BitbucketClientFactory
+import domain.InboxEvent
 import domain.PR
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
@@ -14,9 +15,7 @@ import util.doInAppExecutor
 import util.invokeLater
 import java.util.function.Consumer
 
-// One instance per open project (light service, no plugin.xml registration needed) — each
-// project gets its own PR lists/listeners/polling, instead of every open project window sharing
-// one global PR list. See CLAUDE.md "Per-project state".
+// docs: Per-project state
 @Service(Service.Level.PROJECT)
 class Model(private val project: Project) : PRActions {
     private val vcs: VCS = Git
@@ -92,8 +91,8 @@ class Model(private val project: Project) : PRActions {
     }
 
     private fun reviewingUpdated(diff: Diff) {
-        // Every pull request under review, including the already-approved ones the list collapses
-        // behind a button — the tab title answers "how many am I on", not "how many are left".
+        // Counts every PR under review, including already-approved ones — "how many am I on",
+        // not "how many are left".
         listeners.forEach{
             it.reviewedUpdated(diff);
             it.reviewedCountChanged(reviewing.size())
@@ -116,13 +115,12 @@ class Model(private val project: Project) : PRActions {
             try {
                 BitbucketClientFactory.createClient(project).approve(pr)
                 showNotification("PR ${pr.title} is approved")
-                // Poll straight away rather than waiting out the backoff — an approved PR drops out
-                // of the Reviewing list, and the user should see that happen now.
+                // Poll immediately rather than waiting out the backoff, so the user sees the PR drop out now.
                 project.getService(UpdateTaskHolder::class.java).reschedule()
                 invokeLater { callback.accept(true) }
             } catch (e: Exception) {
                 LOG.warn("Failed to approve PR ${pr.id}", e)
-                // The client here is built without a listener, so nothing else would tell the user.
+                // Built without a listener, so nothing else would tell the user. docs: Known incidents
                 showNotification("Could not approve the pull request: ${pr.title}", NotificationType.WARNING)
             }
         }
@@ -152,9 +150,8 @@ class Model(private val project: Project) : PRActions {
         }
     }
 
-    // Public: also called directly by MainWindow's GitRepositoryChangeListener, so a branch
-    // switch made outside the plugin re-highlights immediately instead of waiting for the next
-    // 15s poll.
+    // Public: also called by MainWindow's GitRepositoryChangeListener, so an outside branch
+    // switch re-highlights immediately instead of waiting for the next poll.
     fun branchChanged() {
         invokeLater {
             listeners.forEach { it.currentBranchChanged(currentBranch()) }
@@ -163,6 +160,28 @@ class Model(private val project: Project) : PRActions {
 
     private fun currentBranch(): String {
         return vcs.currentBranch(project)
+    }
+
+    /** Only balloons if [Settings.inboxNotificationsEnabled] — off by default. docs: Inbox */
+    fun publishInboxEvents(events: List<InboxEvent>, notificationsEnabled: Boolean, unreadCount: Int) {
+        if (events.isEmpty()) return
+        invokeLater {
+            listeners.forEach {
+                it.inboxUpdated(events)
+                it.inboxUnreadCountChanged(unreadCount)
+            }
+        }
+        if (notificationsEnabled) {
+            invokeLater {
+                val message = if (events.size == 1) {
+                    val event = events.first()
+                    "${event.authorDisplayName}: ${event.prTitle}"
+                } else {
+                    "${events.size} new Inbox events"
+                }
+                showNotification(message)
+            }
+        }
     }
 
     fun addListener(listener: Listener) {

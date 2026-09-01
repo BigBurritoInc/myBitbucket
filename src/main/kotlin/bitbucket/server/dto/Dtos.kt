@@ -3,10 +3,8 @@ package bitbucket.server.dto
 import com.fasterxml.jackson.annotation.JsonProperty
 import java.util.Date
 
-/**
- * Bitbucket Server / Data Center wire format. Field names and shapes are the server's, not ours —
- * these are mapped into the `domain` model by ServerDtoMapper and never leave the client layer.
- */
+/** Bitbucket Server / Data Center wire format — mapped into `domain` by ServerDtoMapper and never
+ * leaves the client layer. */
 data class PullRequestDto(
         @JsonProperty("id") val id: Long,
         @JsonProperty("title") val title: String,
@@ -44,10 +42,11 @@ data class UserDto(
         @JsonProperty("id") val id: Long,
         @JsonProperty("displayName") val displayName: String,
         @JsonProperty("links") val links: LinksDto,
-        // Only populated when the request asked for it — see BitbucketClient.AVATAR_SIZE.
+        // Only populated when the request asked for it — see ServerBitbucketClient.AVATAR_SIZE.
         @JsonProperty("avatarUrl") val avatarUrl: String? = null) {
 
-    /** The avatar URL to fetch. See CLAUDE.md "Known incidents" for why [avatarUrl] must win. */
+    /** The avatar URL to fetch — [avatarUrl] must win.
+     * docs: Known incidents */
     fun avatarHref(): String {
         val url = avatarUrl ?: return links.getIconHref()
         if (url.startsWith("http://") || url.startsWith("https://")) return url
@@ -82,7 +81,8 @@ data class LinksDto(@JsonProperty("self") private val selfLink: List<LinkDto>) {
     fun getSelfHref(): String = selfLink.first().href
 
     // Fallback only — this is the web-UI path, which ignores access-token auth and answers with
-    // Bitbucket's generic default avatar. Prefer UserDto.avatarHref(); see CLAUDE.md.
+    // Bitbucket's generic default avatar. Prefer UserDto.avatarHref().
+    // docs: Avatars
     fun getIconHref(): String = "${selfLink.first().href}/avatar.png?s=24"
 }
 
@@ -113,3 +113,28 @@ data class ApproveRequestDto(@JsonProperty("user") val user: SimpleUserDto,
                              @JsonProperty("approved") val approved: String = "true")
 
 data class SimpleUserDto(@JsonProperty("name") val name: String)
+
+/** GET .../pull-requests/{id}/activities — the real general-comment feed (not "comments"). Only
+ * [comment] matters here; other activity types (APPROVED, MERGED, RESCOPED, ...) are ignored.
+ * docs: Inbox */
+data class ActivityDto(
+        @JsonProperty("id") val id: Long,
+        @JsonProperty("action") val action: String,
+        @JsonProperty("comment") val comment: ActivityCommentDto? = null
+)
+
+/** Unlike Cloud, no flat `parent`/`parent.id` — a reply is nested inside its parent's own
+ * [comments] instead; ServerDtoMapper derives a reply's parent while walking this tree.
+ * docs: Inbox */
+data class ActivityCommentDto(
+        @JsonProperty("id") val id: Long,
+        @JsonProperty("text") val text: String,
+        @JsonProperty("author") val author: SimpleAuthorDto,
+        @JsonProperty("createdDate") val createdDate: Date,
+        @JsonProperty("comments") val comments: List<ActivityCommentDto> = emptyList()
+)
+
+data class SimpleAuthorDto(
+        @JsonProperty("name") val name: String,
+        @JsonProperty("displayName") val displayName: String
+)

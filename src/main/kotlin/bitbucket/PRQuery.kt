@@ -10,21 +10,14 @@ import http.UrlBuilder
 import ui.Settings
 import java.net.URL
 
-/**
- * Open pull requests of the configured repository, split by the current user's role.
- *
- * A pull request the user both authored and reviews appears in BOTH lists — that is what the two
- * separate role-filtered requests used to return, and both tabs should still show it.
- */
+/** Open pull requests of the configured repository, split by role. A pull request the user both
+ * authored and reviews appears in BOTH lists — matching what the two separate role-filtered
+ * requests used to return. */
 data class RepositoryPRs(val own: List<PR>, val reviewing: List<PR>)
 
-/**
- * One page of the configured repository's open pull requests.
- *
- * Repository-scoped on purpose: the account-wide `/inbox/pull-requests` this replaced returned every
- * pull request on the whole server and was filtered down client-side, and it has no Bitbucket Cloud
- * equivalent. See CLAUDE.md "Fetching pull requests".
- */
+/** One page of the configured repository's open pull requests, repository-scoped (unlike the
+ * account-wide `/inbox/pull-requests` this replaced).
+ * docs: Fetching pull requests */
 fun pullRequestsUrl(settings: Settings, start: Int, limit: Int, avatarSize: Int): String {
     val urlBuilder = UrlBuilder.fromUrl(URL(settings.url))
             .pathSegments("rest", "api", "1.0",
@@ -46,11 +39,8 @@ fun partitionPRs(prs: List<PR>, currentUser: String): RepositoryPRs {
     return RepositoryPRs(own, reviewing)
 }
 
-/**
- * How much of the current user's attention a pull request still wants. Doubles as the Reviewing
- * list's sort order — declaration order is display order — and as the rule for which ones collapse
- * behind the "Show already approved" button.
- */
+/** How much of the user's attention a PR still wants. Doubles as the Reviewing list's sort order
+ * (declaration order = display order) and the "Show already approved" collapse rule. */
 enum class ReviewAttention {
     /** Not looked at yet, as far as the user's own review status shows. */
     NEEDS_ATTENTION,
@@ -60,10 +50,8 @@ enum class ReviewAttention {
     APPROVED
 }
 
-/**
- * Null (the current user isn't known yet, before the first poll resolves the username) counts as
- * [ReviewAttention.NEEDS_ATTENTION], so nothing is hidden or reordered on the strength of a guess.
- */
+/** Null user (not resolved yet, before the first poll) counts as [ReviewAttention.NEEDS_ATTENTION],
+ * so nothing is hidden/reordered on a guess. */
 fun PR.attentionFor(user: String?): ReviewAttention {
     if (user == null) return ReviewAttention.NEEDS_ATTENTION
     val me = reviewers.firstOrNull { it.userName.sameUserAs(user) } ?: return ReviewAttention.NEEDS_ATTENTION
@@ -74,10 +62,8 @@ fun PR.attentionFor(user: String?): ReviewAttention {
     }
 }
 
-/**
- * Bitbucket treats usernames case-insensitively, and `X-AUSERNAME` echoes the stored casing, which
- * on LDAP-backed servers need not match the casing inside pull request payloads.
- */
+/** Bitbucket compares usernames case-insensitively; `X-AUSERNAME`'s casing need not match a pull
+ * request payload's on LDAP-backed servers. */
 fun String.sameUserAs(other: String): Boolean {
     val a = this.trim()
     val b = other.trim()

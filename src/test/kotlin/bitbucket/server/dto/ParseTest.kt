@@ -10,11 +10,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-/**
- * Deserialization of the Bitbucket Server wire format and its mapping into the domain model.
- *
- * @author Sergey Lukashevich
- */
+/** Deserialization of the Bitbucket Server wire format and its mapping into the domain model.
+ * @author Sergey Lukashevich */
 class ParseTest {
     private val objMapper = ObjectMapper()
     private val prTypeRef = object: TypeReference<PullRequestDto>() { }
@@ -36,10 +33,8 @@ class ParseTest {
         assertNotNull(readPR("pr_sample_noemail.json"))
     }
 
-    /**
-     * Bitbucket omits `nextPageStart` on the last page. PageDto declares it non-null, which is only
-     * safe because replayPageRequest checks isLastPage first — pin both here.
-     */
+    /** Bitbucket omits `nextPageStart` on the last page; PageDto declares it non-null, which is
+     * only safe because replayPageRequest checks isLastPage first — this test pins both. */
     @Test
     fun testParsePageOfPRs() {
         val page = objMapper.reader().forType(prPageTypeRef)

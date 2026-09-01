@@ -6,7 +6,8 @@ import domain.ReviewStatus
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
-// Fake pull requests for DemoModeAction — no real server, no real names. See CLAUDE.md "Demo mode".
+// Fake pull requests for DemoModeAction — no real server, no real names.
+// docs: Demo mode
 object DemoData {
 
     fun samplePRs(): List<PR> = listOf(
@@ -50,7 +51,7 @@ object DemoData {
                 description = description ?: "",
                 fromBranch = fromBranch,
                 toBranch = "develop",
-                author = reviewer("Mira Costa", ReviewStatus.UNAPPROVED, approved = false),
+                author = reviewer("John Bob", ReviewStatus.UNAPPROVED, approved = false),
                 reviewers = reviewers.toSet(),
                 createdAt = now.minusDays(3),
                 updatedAt = now.minusHours(1),

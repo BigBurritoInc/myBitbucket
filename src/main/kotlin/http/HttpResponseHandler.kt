@@ -35,21 +35,25 @@ class HttpResponseHandler<T>(
             return when (statusCode) {
                 HttpStatus.SC_OK -> mapper.invoke(response.entity.content)
                 HttpStatus.SC_FORBIDDEN -> {
-                    LOG.warn("BitBucket request forbidden (403)")
+                    // Bitbucket's error body usually names the actual reason (e.g. a missing
+                    // OAuth scope) that a bare "403" doesn't — logged here, the one place both
+                    // Server and Cloud calls funnel through. docs: Known incidents
+                    LOG.warn("BitBucket request forbidden (403): ${readErrorBodySafely(response)}")
                     listener.actionForbidden()
                     // Don't hand the error body to the body mapper — it isn't the type the caller
                     // asked for, and Jackson would throw something unrelated to the real problem.
                     throw ForbiddenException
                 }
                 HttpStatus.SC_UNAUTHORIZED -> {
-                    LOG.warn("BitBucket request unauthorized (401) — check the configured credentials/access token")
+                    LOG.warn("BitBucket request unauthorized (401) — check the configured " +
+                            "credentials/access token: ${readErrorBodySafely(response)}")
                     listener.invalidCredentials()
                     throw UnauthorizedException
                 }
                 HttpStatus.SC_NOT_FOUND -> {
                     // Distinct from the generic branch below: for the repository-scoped endpoints a
                     // 404 almost always means the configured project/slug is wrong, which deserves a
-                    // pointed message instead of a stack trace. See BitbucketClient.openPRs().
+                    // pointed message instead of a stack trace. See ServerBitbucketClient.openPRs().
                     LOG.warn("BitBucket resource not found (404)")
                     throw NotFoundException
                 }
@@ -60,6 +64,15 @@ class HttpResponseHandler<T>(
             }
         }
 
+        // Best-effort diagnostic read, deliberately separate from the real body mapper above:
+        // must never itself throw (an already-consumed or absent entity) and mask the real
+        // status-code error being reported. Bounded so a huge/unexpected body can't bloat the log.
+        private fun readErrorBodySafely(response: HttpResponse): String = try {
+            response.entity?.content?.bufferedReader(Charsets.UTF_8)?.readText()?.trim()
+                    ?.take(500)?.ifBlank { "(empty body)" } ?: "(no body)"
+        } catch (e: Exception) {
+            "(could not read response body: ${e.message})"
+        }
     }
 
     object UnauthorizedException: RuntimeException()

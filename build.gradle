@@ -6,7 +6,7 @@ plugins {
 
 group 'BigBurritoInc'
 // Bump on every change intended for reinstall (0.7 -> 0.7.1 -> ...) — see CLAUDE.md "Versioning".
-version '0.5.7'
+version '0.7.5'
 
 dependencies {
     intellijPlatform {
@@ -73,6 +73,11 @@ intellijPlatform {
             untilBuild = null
         }
         changeNotes = """
+          v0.7.1 myBitbucket now supports Bitbucket Cloud (bitbucket.org), not only Bitbucket
+          Server <br><br>
+          v0.6.6 Adding a Bitbucket repo now detects it from git and, if possible, your saved git
+          credentials. The old Settings page is gone: use the tool window's "Add Bitbucket repo"
+          button, or the gear menu's "Reconfigure Bitbucket repo..." to change it later.<br><br>
           v0.5.7 The Reviewing tab lists pull requests in the order you need to act on them: waiting
           on you first, then the ones where you asked for changes, then already approved.<br><br>
           v0.5.6 The plugin now checks for updates more often when things are moving and backs off when

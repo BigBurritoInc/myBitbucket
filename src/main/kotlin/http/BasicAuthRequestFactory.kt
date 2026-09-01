@@ -5,10 +5,7 @@ import org.apache.http.HttpMessage
 import java.nio.charset.StandardCharsets
 import java.util.*
 
-/**
- * This implementation of RequestFactory creates HTTP-requests
- * that use Basic Auth with username and password.
- */
+/** Adds a preemptive Basic Auth header built from [user]/[password]. */
 class BasicAuthRequestFactory(private val user: String, private val password: String): RequestFactory() {
 
     override fun addAuthHeader(request: HttpMessage) {

@@ -3,8 +3,7 @@ package ui
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 
-// One instance per open project (light service), like Model/UpdateTaskHolder — a project's demo
-// PRs stay in that project's own window. See DemoModeAction and CLAUDE.md "Demo mode".
+// One instance per open project, like Model/UpdateTaskHolder. docs: Demo mode
 @Service(Service.Level.PROJECT)
 class DemoMode(private val project: Project) {
     var enabled: Boolean = false
@@ -21,9 +20,9 @@ class DemoMode(private val project: Project) {
     fun disable() {
         enabled = false
         project.getService(Model::class.java).updateReviewingPRs(emptyList())
-        // Same guard MainWindow.runUpdateTaskLater() uses — don't restart polling into settings
-        // that were never configured.
-        if (project.getService(Storer::class.java)!!.settings.url.isNotBlank())
+        // Same guard MainWindow.showConfiguredContent() is gated behind — don't restart polling
+        // into a project that was never configured.
+        if (project.getService(Storer::class.java)!!.settings.isConfigured())
             project.getService(UpdateTaskHolder::class.java).scheduleNew()
     }
 }

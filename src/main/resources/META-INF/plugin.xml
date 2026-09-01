@@ -20,17 +20,17 @@
                     icon="bitbucket-bw.svg" factoryClass="MainWindow">
 
         </toolWindow>
-        <projectConfigurable groupId="root" groupWeight="1" instance="ui.BitbucketHelperConfigurable" id="preferences.BitbucketHelper4Idea"
-                             displayName="myBitbucket"/>
         <projectService serviceInterface="ui.Storer"
                         serviceImplementation="ui.Storer"/>
+        <projectService serviceInterface="ui.InboxStore"
+                        serviceImplementation="ui.InboxStore"/>
         <notificationGroup id="MyBitbucket group" displayType="BALLOON"/>
     </extensions>
 
 
     <actions>
         <!-- Not added to any menu/toolbar group — reachable only via Find Action, on purpose.
-             See CLAUDE.md "Demo mode". -->
+             docs: Demo mode -->
         <action id="myBitbucket.ToggleDemoData" class="ui.DemoModeAction" text="myBitbucket: Show Demo Pull Requests"
                 description="Fill the pull request list with fake sample data for screenshots (no real data shown)."/>
     </actions>

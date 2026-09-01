@@ -1,9 +1,11 @@
 package bitbucket.server
 
+import bitbucket.server.dto.ActivityCommentDto
 import bitbucket.server.dto.MergeStatusDto
 import bitbucket.server.dto.ParticipantDto
 import bitbucket.server.dto.ParticipantStatusDto
 import bitbucket.server.dto.PullRequestDto
+import domain.Comment
 import domain.MergeStatus
 import domain.PR
 import domain.Participant
@@ -13,11 +15,8 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.Date
 
-/**
- * Bitbucket Server wire format to domain model. The only place that knows what Server's JSON looks
- * like — everything above the client works in `domain` types. See CLAUDE.md "Domain model vs wire
- * format".
- */
+/** Bitbucket Server wire format to domain model — the only place that knows Server's JSON shape.
+ * docs: Domain model vs wire format */
 fun PullRequestDto.toDomain(): PR = PR(
         id = id,
         title = title,
@@ -55,5 +54,22 @@ fun MergeStatusDto.toDomain(): MergeStatus = MergeStatus(
         // It was fetched, so whatever it says is the real answer.
         known = true
 )
+
+/** Flattens this comment and every reply nested under it (recursively) into one list, deriving
+ * each reply's [Comment.parentCommentId] from the nesting itself — Server's wire format has no
+ * flat "parent" field the way Cloud's does. [parentCommentId] is the id of the comment this one is
+ * nested under, or null at the top of the recursion.
+ * docs: Inbox */
+fun ActivityCommentDto.toDomainTree(parentCommentId: Long? = null): List<Comment> {
+    val self = Comment(
+            id = id,
+            authorUserName = author.name,
+            authorDisplayName = author.displayName,
+            body = text,
+            parentCommentId = parentCommentId,
+            createdAt = createdDate.toUtc()
+    )
+    return listOf(self) + comments.flatMap { it.toDomainTree(id) }
+}
 
 private fun Date.toUtc(): ZonedDateTime = ZonedDateTime.ofInstant(toInstant(), ZoneId.of("UTC"))

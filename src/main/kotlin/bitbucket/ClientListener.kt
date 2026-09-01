@@ -5,11 +5,9 @@ interface ClientListener {
     fun actionForbidden() {}
     fun requestFailed(e: Exception) {}
 
-    /**
-     * The configured project/repository doesn't exist on the server (or the token can't see it).
-     * Separate from [requestFailed] because that one logs at ERROR — which raises the IDE's
-     * "internal error" balloon — and counts towards the error budget that stops polling.
-     */
+    /** Configured project/repository doesn't exist on the server, or the token can't see it —
+     * separate from [requestFailed] since that logs at ERROR and counts toward the poll-stopping
+     * error budget. */
     fun repositoryNotFound(message: String) {}
 
     /** Bitbucket never told us which user the credentials belong to, so PRs can't be attributed. */

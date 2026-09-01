@@ -8,7 +8,7 @@ class PRState(private val prsMap: Map<Long, PR> = HashMap()) {
         val removed = prsMap.filterKeys { !newMap.containsKey(it) }
         val added = newMap.filterKeys { !prsMap.containsKey(it) }
         val updated = newMap.filterKeys { prsMap.containsKey(it) && prsMap[it] != newMap[it]
-        //It is not clear if any change leads to version change so if versions are equal consider it as a change
+                // <=, not <: it's not guaranteed every change bumps the revision, so treat equal as changed too.
                 && prsMap.getValue(it).revision <= newMap.getValue(it).revision }
         val mergeStatusChanged = newMap.filter { it.value.mergeStatus.known }
                 .filterKeys { prsMap.containsKey(it)

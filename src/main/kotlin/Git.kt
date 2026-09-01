@@ -22,9 +22,7 @@ import util.LOG
 object Git: VCS {
     private const val updateActionId = "Vcs.UpdateProject"
 
-    // Every lookup below takes `project` explicitly instead of guessing it (ambient DataManager
-    // focus, ProjectManager.openProjects, etc.) — with more than one project window open, an
-    // ambient guess can resolve to the wrong one. See CLAUDE.md "Per-project state".
+    // docs: Per-project state
     override fun checkoutBranch(project: Project, branch: String, listener: Runnable) {
         LOG.debug("Checking out $branch")
         val currentRepository = currentRepository(project)
@@ -76,9 +74,7 @@ object Git: VCS {
         val baseDir = project.guessProjectDir()
         if (baseDir != null) {
             val vcs = VcsUtil.getVcsFor(project, baseDir)
-            //Initial problem: git4idea.GitVcs cannot be cast to git4idea.GitVcs
-            //Lessons learned: do not add runtime dependencies for a module if it is a plugin.
-            //Use plugin.xml to describe them
+            // docs: Known incidents
             if (vcs is GitVcs)
                 return vcs
         }

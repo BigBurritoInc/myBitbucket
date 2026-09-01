@@ -17,7 +17,7 @@ object PanelRunner {
 
     // Model is a per-project service and needs a real Project — PanelRunner has neither, so it
     // skips PanelFactory.createReviewPanel() and builds its own Panel with a no-op stub instead.
-    // See CLAUDE.md "PanelRunner".
+    // docs: PanelRunner
     private val noopActions = object : PRActions {
         override fun checkout(pr: PR) {}
         override fun approve(pr: PR, callback: java.util.function.Consumer<Boolean>) {}
@@ -26,7 +26,8 @@ object PanelRunner {
 
     @JvmStatic
     fun main(args: Array<String>) {
-        // Must precede any PRComponent construction — see CLAUDE.md "PanelRunner".
+        // Must precede any PRComponent construction.
+        // docs: PanelRunner
         JBUIScale.setSystemScaleFactor(1f)
         val frame = JFrame()
         val panel = object : Panel() {
@@ -39,7 +40,8 @@ object PanelRunner {
         }
         panel.dataUpdated(Diff(map, emptyMap(), emptyMap(), emptyMap()))
         panel.currentBranchChanged("feature/PROJ-1980-it-is-a-feature-that-has-a-workitem-branch3")
-        // Plain JScrollPane, not PanelFactory.wrapIntoJBScroll() — see CLAUDE.md "PanelRunner".
+        // Plain JScrollPane, not PanelFactory.wrapIntoJBScroll().
+        // docs: PanelRunner
         frame.contentPane.add(JScrollPane(panel))
 
         frame.pack()

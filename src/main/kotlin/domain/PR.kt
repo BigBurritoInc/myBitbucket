@@ -2,14 +2,9 @@ package domain
 
 import java.time.ZonedDateTime
 
-/**
- * A pull request, as the rest of the plugin understands one — no Bitbucket flavour, no Jackson.
- *
- * The wire formats live in `bitbucket.server.dto` (and, later, a Cloud equivalent) and are mapped
- * into this on the way out of the client. Nothing above the client layer should ever see a DTO:
- * Bitbucket Server and Bitbucket Cloud disagree on almost every field name, and on some concepts
- * outright. See CLAUDE.md "Domain model vs wire format".
- */
+/** A pull request as the rest of the plugin understands one — no Bitbucket flavour, no Jackson;
+ * exists to hide the wire-format split.
+ * docs: Domain model vs wire format */
 data class PR(
         val id: Long,
         val title: String,
@@ -21,14 +16,9 @@ data class PR(
         val createdAt: ZonedDateTime,
         val updatedAt: ZonedDateTime,
         val commentCount: Int,
-        /** Where the pull request lives in the browser. */
         val webUrl: String,
-        /**
-         * Monotonic "has this changed" token. Bitbucket Server has a real `version` counter;
-         * Bitbucket Cloud has none, so it uses the update timestamp. Only ever compared, never
-         * displayed or sent back — except by the Server client, whose merge endpoint wants the
-         * version for optimistic locking.
-         */
+        /** Monotonic "has this changed" token — Server's `version`, Cloud's update timestamp.
+         * docs: Domain model vs wire format */
         val revision: Long,
         val closed: Boolean
 ) {

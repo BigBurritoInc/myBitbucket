@@ -4,15 +4,10 @@ import com.intellij.openapi.components.Service
 import org.apache.http.HttpResponse
 import util.LOG
 
-/**
- * The Bitbucket username the configured credentials belong to, learned from the `X-AUSERNAME`
- * response header rather than from Settings. See CLAUDE.md "Current user" for why Settings can't
- * supply it.
- *
- * One instance per open project (light service, no plugin.xml registration needed) — two projects
- * can be configured against different servers or different accounts. See CLAUDE.md
- * "Per-project state".
- */
+/** The Bitbucket username the credentials belong to (learned from `X-AUSERNAME` rather than
+ * Settings) — one instance per project (two projects can be configured against different servers
+ * or accounts).
+ * docs: Current user, Per-project state */
 @Service(Service.Level.PROJECT)
 class CurrentUser {
 
@@ -28,10 +23,8 @@ class CurrentUser {
 
     val name: String? get() = captured
 
-    /**
-     * Bitbucket echoes the authenticated username on every response. Reading a header does not
-     * consume the response entity, so this is safe to call before the body is parsed.
-     */
+    /** Bitbucket echoes the authenticated username on every response; reading a header doesn't
+     * consume the entity, so this is safe to call before the body is parsed. */
     fun captureFrom(response: HttpResponse) {
         val value = response.getFirstHeader(HEADER)?.value?.trim()
         if (value.isNullOrEmpty() || value == captured) return
