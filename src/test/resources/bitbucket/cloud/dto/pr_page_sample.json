@@ -1,0 +1,35 @@
+{
+    "page": 1,
+    "pagelen": 50,
+    "size": 1,
+    "values": [
+        {
+            "id": 42,
+            "title": "Fix the thing",
+            "author": {
+                "uuid": "{author-uuid}",
+                "display_name": "Dima"
+            },
+            "state": "OPEN",
+            "source": {
+                "branch": {
+                    "name": "feature/fix-the-thing"
+                }
+            },
+            "destination": {
+                "branch": {
+                    "name": "main"
+                }
+            },
+            "participants": [],
+            "created_on": "2026-08-01T10:00:00.000000+00:00",
+            "updated_on": "2026-08-02T11:30:00.000000+00:00",
+            "comment_count": 0,
+            "links": {
+                "html": {
+                    "href": "https://bitbucket.org/example-user/example-repo/pull-requests/42"
+                }
+            }
+        }
+    ]
+}

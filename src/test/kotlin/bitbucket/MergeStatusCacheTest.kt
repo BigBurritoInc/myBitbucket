@@ -22,7 +22,7 @@ class MergeStatusCacheTest {
         assertEquals(1, fetchCount)
     }
 
-    /** The point of the cache — also asserts the status lands on the new PR object, since every
+    /** The point of the cache - also asserts the status lands on the new PR object, since every
      * poll parses fresh ones and Diff.mergeStatusChanged ignores unknown status. */
     @Test
     fun unchangedPRIsServedFromCache() {
@@ -37,7 +37,7 @@ class MergeStatusCacheTest {
         assertSame(cached, secondPoll.mergeStatus)
     }
 
-    /** Time alone must not trigger a request — only the pull request actually changing does. */
+    /** Time alone must not trigger a request - only the pull request actually changing does. */
     @Test
     fun nothingIsRefetchedWhileVersionsHold() {
         val cache = MergeStatusCache()

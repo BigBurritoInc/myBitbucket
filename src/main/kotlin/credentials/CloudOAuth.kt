@@ -35,10 +35,10 @@ object CloudOAuth {
     private const val AUTHORIZE_URL = "https://bitbucket.org/site/oauth2/authorize"
     private const val TOKEN_URL = "https://bitbucket.org/site/oauth2/access_token"
 
-    // Direct PasswordSafe key, not CredentialStore — different credential shape (two tokens + expiry).
+    // Direct PasswordSafe key, not CredentialStore - different credential shape (two tokens + expiry).
     private const val OAUTH_KEY = "bitbucket.org-oauth"
 
-    // Refresh once fewer than this many millis remain, not right at expiry — margin for the
+    // Refresh once fewer than this many millis remain, not right at expiry - margin for the
     // request itself and clock drift.
     private const val REFRESH_MARGIN_MILLIS = 2 * 60 * 1000L
     private const val CALLBACK_TIMEOUT_MILLIS = 5 * 60 * 1000L
@@ -90,7 +90,7 @@ object CloudOAuth {
         }
     }
 
-    /** Must be called off the EDT — opens the system browser and blocks on a local loopback
+    /** Must be called off the EDT - opens the system browser and blocks on a local loopback
      * listener for the redirect. Caller should wrap this in a cancellable modal progress. Throws
      * [AuthorizationException] on denial, timeout, a port conflict, or a malformed response. */
     fun authorize(): TokenBundle {
@@ -99,13 +99,13 @@ object CloudOAuth {
             ServerSocket(CALLBACK_PORT, 1, InetAddress.getLoopbackAddress())
         } catch (e: Exception) {
             throw AuthorizationException("Could not start the local sign-in listener on port " +
-                    "$CALLBACK_PORT — something else on this machine may already be using it.", e)
+                    "$CALLBACK_PORT - something else on this machine may already be using it.", e)
         }
         socket.use {
             it.soTimeout = POLL_TIMEOUT_MILLIS
             BrowserUtil.browse("$AUTHORIZE_URL?client_id=$CLIENT_ID&response_type=code&state=$state")
             val code = awaitCallback(it, state)
-            // Deliberately not persisted here — caller commits via store() on its own timing.
+            // Deliberately not persisted here - caller commits via store() on its own timing.
             return exchangeToken(
                     BasicNameValuePair("grant_type", "authorization_code"),
                     BasicNameValuePair("code", code))
@@ -136,28 +136,28 @@ object CloudOAuth {
                         else "Bitbucket returned an error during sign-in: $error")
             }
             if (params["state"] != expectedState) {
-                throw AuthorizationException("Sign-in response failed a security check — try again.")
+                throw AuthorizationException("Sign-in response failed a security check - try again.")
             }
             return params["code"]
                     ?: throw AuthorizationException("Bitbucket's sign-in response was missing a code.")
         }
     }
 
-    // Short bursts, not one blocking accept() — so Cancel is actually noticed.
+    // Short bursts, not one blocking accept() - so Cancel is actually noticed.
     private fun acceptWithCancellation(socket: ServerSocket, deadlineMillis: Long): Socket {
         while (true) {
-            // Must propagate unmodified, not become an AuthorizationException — swallowing it
+            // Must propagate unmodified, not become an AuthorizationException - swallowing it
             // here leaves the platform's own progress/modal bookkeeping thinking the task is
             // still running, which is what left the "Reconfigure" dialog looking alive but inert
             // after Cancel. docs: Known incidents
             ProgressManager.checkCanceled()
             if (System.currentTimeMillis() > deadlineMillis) {
-                throw AuthorizationException("Sign-in timed out waiting for the browser — try again.")
+                throw AuthorizationException("Sign-in timed out waiting for the browser - try again.")
             }
             try {
                 return socket.accept()
             } catch (e: SocketTimeoutException) {
-                // Just poll again — see the class-level timeout constants.
+                // Just poll again - see the class-level timeout constants.
             }
         }
     }

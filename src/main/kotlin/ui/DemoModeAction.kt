@@ -4,7 +4,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 
-// Reachable only via Find Action (Cmd/Ctrl+Shift+A) — not in any menu/toolbar. docs: Demo mode
+// Reachable only via Find Action (Cmd/Ctrl+Shift+A) - not in any menu/toolbar. docs: Demo mode
 class DemoModeAction : AnAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 

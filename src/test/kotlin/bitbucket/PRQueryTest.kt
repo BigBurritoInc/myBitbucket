@@ -62,7 +62,7 @@ class PRQueryTest {
         assertEquals(1, result.reviewing.size)
     }
 
-    /** A self-reviewed PR belongs in both lists — the two role-filtered requests used to return it twice. */
+    /** A self-reviewed PR belongs in both lists - the two role-filtered requests used to return it twice. */
     @Test
     fun authorWhoIsAlsoReviewerGoesToBoth() {
         val prs = listOf(pr(1, author = "alice", reviewers = listOf("alice", "bob")))
@@ -87,7 +87,7 @@ class PRQueryTest {
         assertEquals(1, partitionPRs(prs, "bob").reviewing.size)
     }
 
-    /** A blank username must not match everyone — it would put every PR in both lists. */
+    /** A blank username must not match everyone - it would put every PR in both lists. */
     @Test
     fun blankUsernameMatchesNobody() {
         val prs = listOf(pr(1, author = "alice", reviewers = listOf("bob")))

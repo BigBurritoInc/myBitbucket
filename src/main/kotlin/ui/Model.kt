@@ -28,7 +28,7 @@ class Model(private val project: Project) : PRActions {
     private val notificationGroup
         get() = NotificationGroupManager.getInstance().getNotificationGroup("MyBitbucket group")
 
-    /** @return whether anything actually changed — UpdateTask paces its next poll on this. */
+    /** @return whether anything actually changed - UpdateTask paces its next poll on this. */
     fun updateOwnPRs(prs: List<PR>): Boolean {
         var changed: Boolean
         synchronized(this) {
@@ -59,7 +59,7 @@ class Model(private val project: Project) : PRActions {
         }
     }
 
-    /** @return whether anything actually changed — UpdateTask paces its next poll on this. */
+    /** @return whether anything actually changed - UpdateTask paces its next poll on this. */
     fun updateReviewingPRs(prs: List<PR>): Boolean {
         var changed: Boolean
         synchronized(this) {
@@ -91,7 +91,7 @@ class Model(private val project: Project) : PRActions {
     }
 
     private fun reviewingUpdated(diff: Diff) {
-        // Counts every PR under review, including already-approved ones — "how many am I on",
+        // Counts every PR under review, including already-approved ones - "how many am I on",
         // not "how many are left".
         listeners.forEach{
             it.reviewedUpdated(diff);
@@ -122,6 +122,20 @@ class Model(private val project: Project) : PRActions {
                 LOG.warn("Failed to approve PR ${pr.id}", e)
                 // Built without a listener, so nothing else would tell the user. docs: Known incidents
                 showNotification("Could not approve the pull request: ${pr.title}", NotificationType.WARNING)
+            }
+        }
+    }
+
+    override fun unapprove(pr: PR, callback: Consumer<Boolean>) {
+        doInAppExecutor {
+            try {
+                BitbucketClientFactory.createClient(project).unapprove(pr)
+                showNotification("Approval removed from PR ${pr.title}")
+                project.getService(UpdateTaskHolder::class.java).reschedule()
+                invokeLater { callback.accept(true) }
+            } catch (e: Exception) {
+                LOG.warn("Failed to unapprove PR ${pr.id}", e)
+                showNotification("Could not remove approval from the pull request: ${pr.title}", NotificationType.WARNING)
             }
         }
     }
@@ -162,7 +176,7 @@ class Model(private val project: Project) : PRActions {
         return vcs.currentBranch(project)
     }
 
-    /** Only balloons if [Settings.inboxNotificationsEnabled] — off by default. docs: Inbox */
+    /** Only balloons if [Settings.inboxNotificationsEnabled] - off by default. docs: Inbox */
     fun publishInboxEvents(events: List<InboxEvent>, notificationsEnabled: Boolean, unreadCount: Int) {
         if (events.isEmpty()) return
         invokeLater {

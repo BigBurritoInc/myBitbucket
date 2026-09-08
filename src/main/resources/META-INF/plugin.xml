@@ -29,7 +29,7 @@
 
 
     <actions>
-        <!-- Not added to any menu/toolbar group — reachable only via Find Action, on purpose.
+        <!-- Not added to any menu/toolbar group - reachable only via Find Action, on purpose.
              docs: Demo mode -->
         <action id="myBitbucket.ToggleDemoData" class="ui.DemoModeAction" text="myBitbucket: Show Demo Pull Requests"
                 description="Fill the pull request list with fake sample data for screenshots (no real data shown)."/>

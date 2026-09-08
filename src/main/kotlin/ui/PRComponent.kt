@@ -27,13 +27,22 @@ import javax.swing.event.HyperlinkEvent
 interface PRActions {
     fun checkout(pr: PR)
     fun approve(pr: PR, callback: Consumer<Boolean>)
+    /** Mirrors [approve] - withdraws an approval already given, so the Approve button can act as
+     * a toggle instead of only ever moving one way. docs: Known incidents */
+    fun unapprove(pr: PR, callback: Consumer<Boolean>)
     fun merge(pr: PR, callback: Consumer<Boolean>)
 }
 
-open class PRComponent(val pr: PR, protected val actions: PRActions) : JPanel() {
-
-    val green = Color(86, 167, 106)
-    val greenColor: Color = JBColor(green, green)
+open class PRComponent(
+        val pr: PR,
+        protected val actions: PRActions,
+        /** Whether the current user has already approved this PR - PanelFactory computes this the
+         * same way the "Show already approved" collapse already does (PR.attentionFor). Lets the
+         * Approve button open in the right state instead of always starting as "Approve" even for
+         * a PR you approved before this card was (re)built. docs: Known incidents */
+        alreadyApproved: Boolean = false
+) : JPanel() {
+    private var approved = alreadyApproved
 
     private val checkoutBtn = JButton("Checkout", AllIcons.Vcs.Branch)
     val approveBtn = JButton("Approve", AllIcons.General.InspectionsOK)
@@ -55,7 +64,7 @@ open class PRComponent(val pr: PR, protected val actions: PRActions) : JPanel() 
             add(descriptionSeparator(), BorderLayout.SOUTH)
         }
     }
-    // JLabel, not JButton — button chrome padding fights the GridBagLayout insets below. Always
+    // JLabel, not JButton - button chrome padding fights the GridBagLayout insets below. Always
     // present (blank icon if no description) so column 0's width never depends on it.
     private val expandToggleLabel: JLabel = createExpandToggleLabel()
     private var expanded = false
@@ -67,7 +76,7 @@ open class PRComponent(val pr: PR, protected val actions: PRActions) : JPanel() 
         private val LEFT_RIGHT_INSET = JBUI.scale(7)
         private val TOP_BOTTOM_INSET = JBUI.scale(10)
         private val CHEVRON_INSET = JBUI.scale(1)
-        private const val TOTAL_COLUMNS = 4
+        private const val TOTAL_COLUMNS = 5
     }
 
     init {
@@ -147,16 +156,19 @@ open class PRComponent(val pr: PR, protected val actions: PRActions) : JPanel() 
         gbc.insets.top = TOP_BOTTOM_INSET
         gbc.insets.bottom = TOP_BOTTOM_INSET
         // Column 0 stays reserved for the chevron so its width never depends on the button row.
-        // Checkout and approve share one cell — exactly one is ever visible (currentBranchChanged()).
+        // Checkout and Approve each get their own column now - both can be relevant at once (see
+        // currentBranchChanged()) - same preferred size only for visual consistency, not to share
+        // a cell.
         gbc.gridx = 1
         this.approveBtn.preferredSize = this.checkoutBtn.preferredSize
         this.add(this.checkoutBtn, gbc)
-        this.add(this.approveBtn, gbc)
         gbc.gridx = 2
+        this.add(this.approveBtn, gbc)
+        gbc.gridx = 3
         gbc.anchor = GridBagConstraints.WEST
         this.add(this.mergeBtn, gbc)
 
-        gbc.gridx = 3
+        gbc.gridx = 4
         gbc.weightx = 1.0
         gbc.anchor = GridBagConstraints.EAST
         this.add(this.reviewersPanel, gbc)
@@ -232,26 +244,55 @@ open class PRComponent(val pr: PR, protected val actions: PRActions) : JPanel() 
         return pane
     }
 
+    // Toggles between "Approve" and "Unapprove" rather than disabling once clicked - previously
+    // an already-approved PR still showed an active "Approve" button (or, after clicking it this
+    // session, a permanently disabled "Approved" one), with no way to withdraw the approval.
+    // docs: Known incidents
     open fun createComponentSpecificButton() {
         this.approveBtn.addActionListener {
-            actions.approve(this.pr, Consumer { approved ->
-                if (approved) {
-                    this.approveBtn.text = "Approved"
-                    this.approveBtn.isEnabled = false
-                }
-            })
+            this.approveBtn.isEnabled = false
+            if (this.approved) {
+                actions.unapprove(this.pr, Consumer { success -> onApprovalChangeResult(success, nowApproved = false) })
+            } else {
+                actions.approve(this.pr, Consumer { success -> onApprovalChangeResult(success, nowApproved = true) })
+            }
         }
-        this.approveBtn.foreground = this.greenColor
         this.approveBtn.font = UIUtil.getButtonFont()
         this.approveBtn.isVisible = true
+        updateApproveButtonUi()
+    }
+
+    private fun onApprovalChangeResult(success: Boolean, nowApproved: Boolean) {
+        if (success) {
+            this.approved = nowApproved
+        }
+        updateApproveButtonUi()
+    }
+
+    private fun updateApproveButtonUi() {
+        this.approveBtn.isEnabled = true
+        this.approveBtn.foreground = APPROVE_GREEN
+        if (this.approved) {
+            this.approveBtn.text = "Unapprove"
+            this.approveBtn.icon = AllIcons.General.Remove
+            this.approveBtn.toolTipText = "Withdraw your approval"
+        } else {
+            this.approveBtn.text = "Approve"
+            this.approveBtn.icon = AllIcons.General.InspectionsOK
+            this.approveBtn.toolTipText = null
+        }
     }
 
     open fun currentBranchChanged(branch: String) {
         val isActive = this.pr.fromBranch == branch
         this.border = if (isActive) BorderFactory.createLineBorder(UIUtil.getListSelectionBackground(), 3)
                 else UIUtil.getTextFieldBorder()
-        this.approveBtn.isVisible = isActive
-        this.checkoutBtn.isVisible = !isActive
+        // Checkout and Approve are both always visible now, in their own columns - a reviewer
+        // often wants to approve a PR without checking it out. Checkout instead reflects "already
+        // done" by disabling itself and relabeling, rather than disappearing.
+        // docs: Known incidents
+        this.checkoutBtn.text = if (isActive) "Checked out" else "Checkout"
+        this.checkoutBtn.isEnabled = !isActive
     }
 }
 
@@ -285,7 +326,7 @@ class OwnPRComponent(ownPR: PR, actions: PRActions) : PRComponent(ownPR, actions
                 })
             }
         }
-        this.mergeBtn.foreground = this.greenColor
+        this.mergeBtn.foreground = APPROVE_GREEN
         this.mergeBtn.font = UIUtil.getButtonFont()
     }
 

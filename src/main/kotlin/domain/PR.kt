@@ -2,7 +2,7 @@ package domain
 
 import java.time.ZonedDateTime
 
-/** A pull request as the rest of the plugin understands one — no Bitbucket flavour, no Jackson;
+/** A pull request as the rest of the plugin understands one - no Bitbucket flavour, no Jackson;
  * exists to hide the wire-format split.
  * docs: Domain model vs wire format */
 data class PR(
@@ -17,7 +17,7 @@ data class PR(
         val updatedAt: ZonedDateTime,
         val commentCount: Int,
         val webUrl: String,
-        /** Monotonic "has this changed" token — Server's `version`, Cloud's update timestamp.
+        /** Monotonic "has this changed" token - Server's `version`, Cloud's update timestamp.
          * docs: Domain model vs wire format */
         val revision: Long,
         val closed: Boolean
@@ -28,16 +28,16 @@ data class PR(
     var mergeStatus: MergeStatus = MergeStatus.UNKNOWN
 }
 
-/** Someone attached to a pull request — its author, or one of its reviewers. */
+/** Someone attached to a pull request - its author or one of its reviewers */
 data class Participant(
-        /** The login Bitbucket knows them by; compared against the current user, never displayed. */
+        /** The login Bitbucket knows them by; compared against the current user, never displayed */
         val userName: String,
         val displayName: String,
         val approved: Boolean,
         val status: ReviewStatus
 )
 
-// Declaration order is the sort order in ReviewersPanel: whoever still needs to act comes first.
+// Declaration order is the sort order in ReviewersPanel
 enum class ReviewStatus {
     NEEDS_WORK,
     APPROVED,

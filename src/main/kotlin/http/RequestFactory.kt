@@ -1,6 +1,7 @@
 package http
 
 import org.apache.http.HttpMessage
+import org.apache.http.client.methods.HttpDelete
 import org.apache.http.client.methods.HttpGet
 import org.apache.http.client.methods.HttpPost
 import org.apache.http.client.methods.HttpPut
@@ -22,6 +23,12 @@ abstract class RequestFactory {
     }
     fun createGet(url: String): HttpGet {
         val request = HttpGet(url)
+        addAuthHeader(request)
+        return request
+    }
+
+    fun createDelete(url: String): HttpDelete {
+        val request = HttpDelete(url)
         addAuthHeader(request)
         return request
     }

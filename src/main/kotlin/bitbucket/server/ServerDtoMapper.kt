@@ -15,7 +15,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.Date
 
-/** Bitbucket Server wire format to domain model — the only place that knows Server's JSON shape.
+/** Bitbucket Server wire format to domain model - the only place that knows Server's JSON shape.
  * docs: Domain model vs wire format */
 fun PullRequestDto.toDomain(): PR = PR(
         id = id,
@@ -56,7 +56,7 @@ fun MergeStatusDto.toDomain(): MergeStatus = MergeStatus(
 )
 
 /** Flattens this comment and every reply nested under it (recursively) into one list, deriving
- * each reply's [Comment.parentCommentId] from the nesting itself — Server's wire format has no
+ * each reply's [Comment.parentCommentId] from the nesting itself - Server's wire format has no
  * flat "parent" field the way Cloud's does. [parentCommentId] is the id of the comment this one is
  * nested under, or null at the top of the recursion.
  * docs: Inbox */

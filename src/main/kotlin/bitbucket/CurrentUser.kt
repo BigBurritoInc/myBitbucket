@@ -5,7 +5,7 @@ import org.apache.http.HttpResponse
 import util.LOG
 
 /** The Bitbucket username the credentials belong to (learned from `X-AUSERNAME` rather than
- * Settings) — one instance per project (two projects can be configured against different servers
+ * Settings) - one instance per project (two projects can be configured against different servers
  * or accounts).
  * docs: Current user, Per-project state */
 @Service(Service.Level.PROJECT)
@@ -16,7 +16,7 @@ class CurrentUser {
     }
 
     // Written from the poll thread, read from the action executor and the EDT. Every write is a
-    // single unconditional assignment of an immutable String, so @Volatile is enough — there is no
+    // single unconditional assignment of an immutable String, so @Volatile is enough - there is no
     // read-modify-write to make atomic.
     @Volatile
     private var captured: String? = null

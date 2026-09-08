@@ -1,3 +1,4 @@
+import bitbucket.BitbucketClientFactory
 import com.intellij.credentialStore.Credentials
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
@@ -15,6 +16,7 @@ import credentials.CredentialStore
 import credentials.GitCredentialHelper
 import discovery.DiscoveredRemote
 import discovery.discoverRepositoryUrl
+import discovery.probeIsBitbucketServer
 import git4idea.repo.GitRepository
 import git4idea.repo.GitRepositoryChangeListener
 import ui.*
@@ -22,12 +24,12 @@ import java.awt.*
 import javax.swing.*
 
 
-// A ToolWindowFactory instance is shared across every open project — the platform calls
+// A ToolWindowFactory instance is shared across every open project - the platform calls
 // createToolWindowContent(project, ...) once per project on the SAME instance, which is exactly
 // why every method here takes project/toolWindow as an explicit parameter instead of this class
 // ever storing one on `this`. It used to: `project`/`window`/`reviewingContent`/`ownContent`/
 // `inboxContent` were instance fields, so opening a second project silently overwrote the first
-// project's — "Reconfigure" in project A's gear menu could end up reading/writing project B's
+// project's - "Reconfigure" in project A's gear menu could end up reading/writing project B's
 // Storer, and a tab title update could land on the wrong project's tool window. Fixed by making
 // every per-project value a local, closed over by that project's own callbacks only.
 // docs: Per-project state, Known incidents
@@ -51,7 +53,7 @@ class MainWindow : ToolWindowFactory, DumbAware {
 
         val reviewingContent = addTab(cm, wrapIntoJBScroll(reviewingPanel), "Reviewing (0)")
         val ownContent = addTab(cm, wrapIntoJBScroll(ownPanel), "Created (0)")
-        // Inbox tab is implemented but disabled pending a UX rework — see
+        // Inbox tab is implemented but disabled pending a UX rework - see
         // UpdateTaskHolder.INBOX_FEATURE_ENABLED. Null here (this project's local, not shared)
         // just means the feature is off; inboxUnreadCountChanged() below no-ops on it. docs: Inbox
         var inboxContent: Content? = null
@@ -83,12 +85,12 @@ class MainWindow : ToolWindowFactory, DumbAware {
         model.addListener(ownPanel)
         project.getService(UpdateTaskHolder::class.java).scheduleNew()
 
-        // Re-highlight on any branch change, not just the next poll — covers checkout from the
+        // Re-highlight on any branch change, not just the next poll - covers checkout from the
         // IDE's own branch widget/terminal, not only this plugin's own Checkout button.
         project.messageBus.connect(project).subscribe(GitRepository.GIT_REPO_CHANGE,
                 GitRepositoryChangeListener { model.branchChanged() })
 
-        // Inline action, no plugin.xml <action> entry — same pattern DemoModeAction uses to stay
+        // Inline action, no plugin.xml <action> entry - same pattern DemoModeAction uses to stay
         // out of Find Action/menus, here reached only from the tool window's own gear icon.
         val reconfigureAction = object : DumbAwareAction("Reconfigure Bitbucket repo…") {
             override fun actionPerformed(e: AnActionEvent) = reconfigure(project)
@@ -108,7 +110,7 @@ class MainWindow : ToolWindowFactory, DumbAware {
     }
 
     // On a successful save, the empty-state placeholder tab is torn down and replaced with the
-    // real PR tabs — the only path that ever builds them.
+    // real PR tabs - the only path that ever builds them.
     private fun addProject(project: Project, toolWindow: ToolWindow) {
         val discovery = discoverRemoteAndCredentials(project, existing = null)
         val dialog = AddProjectDialog(project, existing = null, discovered = discovery.discovered,
@@ -120,7 +122,7 @@ class MainWindow : ToolWindowFactory, DumbAware {
         }
     }
 
-    // Tabs and listeners already exist from the one showConfiguredContent() call — reconfiguring
+    // Tabs and listeners already exist from the one showConfiguredContent() call - reconfiguring
     // only persists the new Settings/credential and restarts the poll, no tab rebuilding.
     private fun reconfigure(project: Project) {
         val existing = project.getService(Storer::class.java)!!.settings
@@ -133,27 +135,36 @@ class MainWindow : ToolWindowFactory, DumbAware {
         }
     }
 
-    // Plain data class, not a Triple — cloudSignedIn made a fourth field necessary.
+    // Plain data class, not a Triple - cloudSignedIn made a fourth field necessary.
     private data class DiscoveryResult(val discovered: DiscoveredRemote?, val credentials: Credentials?,
                                         val storedSecret: String?, val cloudSignedIn: Boolean)
 
-    // Fast EDT-safe discovery, then off-EDT lookups under one modal progress: a saved git
-    // credential, [existing]'s already-saved secret, and (Cloud only) whether an OAuth token is
-    // already stored.
+    // Fast EDT-safe discovery, then off-EDT lookups under one modal progress: confirming a Server
+    // candidate is real, a saved git credential, [existing]'s already-saved secret, and (Cloud
+    // only) whether an OAuth token is already stored.
     // docs: Basic Auth, Adding Bitbucket Cloud support
     private fun discoverRemoteAndCredentials(project: Project, existing: Settings?): DiscoveryResult {
-        val discovered = discoverRepositoryUrl(project)
+        var discovered = discoverRepositoryUrl(project)
         var credentials: Credentials? = null
         var storedSecret: String? = null
         var cloudSignedIn = false
         val scheme = discovered?.scheme
         val gitRoot = discovered?.gitRoot
-        // Cloud never reuses a git credential — that's a git username+token, not the email+API
+        // Cloud never reuses a git credential - that's a git username+token, not the email+API
         // token Cloud's REST API wants. docs: Adding Bitbucket Cloud support
         val tryGitCredentials = scheme != null && gitRoot != null && discovered?.cloud != true
-        if (tryGitCredentials || existing != null) {
+        // A Server candidate parsed from the git remote is only a URL-shape guess - ssh remotes
+        // especially have no /scm/ marker to tell a real Bitbucket Server clone URL apart from
+        // GitHub's/GitLab's identically-shaped one - so it's confirmed with a live, unauthenticated
+        // probe before it ever reaches the dialog (see ServerProbe.kt). Cloud needs no probe:
+        // bitbucket.org is the one fixed host, nothing to disambiguate. docs: Known incidents
+        val needsProbe = discovered?.cloud == false
+        if (tryGitCredentials || existing != null || needsProbe) {
             ProgressManager.getInstance().runProcessWithProgressSynchronously({
-                if (tryGitCredentials) {
+                if (needsProbe && !probeIsBitbucketServer(discovered!!.baseUrl!!, BitbucketClientFactory.createHttpClient())) {
+                    discovered = null
+                }
+                if (tryGitCredentials && discovered != null) {
                     credentials = GitCredentialHelper.tryFill(project, gitRoot!!, scheme!!, discovered!!.host)
                 }
                 if (existing != null) {
@@ -163,7 +174,7 @@ class MainWindow : ToolWindowFactory, DumbAware {
                         cloudSignedIn = CloudOAuth.stored() != null
                     }
                 }
-            }, "Checking for Saved Credentials", true, project)
+            }, "Detecting Bitbucket Repository", true, project)
         }
         return DiscoveryResult(discovered, credentials, storedSecret, cloudSignedIn)
     }

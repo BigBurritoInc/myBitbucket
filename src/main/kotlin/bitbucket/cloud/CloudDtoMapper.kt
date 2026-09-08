@@ -12,10 +12,10 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
-/** Bitbucket Cloud wire format to domain model — the only place that knows Cloud's JSON shape.
+/** Bitbucket Cloud wire format to domain model - the only place that knows Cloud's JSON shape.
  * docs: Domain model vs wire format */
 fun PullRequestDto.toDomain(): PR {
-    // The author often also appears in `participants` (with their own approved/state) — look it
+    // The author often also appears in `participants` (with their own approved/state) - look it
     // up for a real answer instead of guessing UNAPPROVED for every author.
     val authorParticipant = participants.firstOrNull { it.user.uuid == author.uuid }
     return PR(
@@ -53,7 +53,7 @@ fun ParticipantDto.toDomain(): Participant = Participant(
         }
 )
 
-// No public merge-conflict-status endpoint on Cloud — always optimistic; a real conflict
+// No public merge-conflict-status endpoint on Cloud - always optimistic; a real conflict
 // surfaces as a failed merge attempt instead. docs: Adding Bitbucket Cloud support
 val CLOUD_MERGE_STATUS = MergeStatus(canMerge = true, conflicted = false, vetoes = emptyList(), known = true)
 
@@ -67,6 +67,6 @@ fun CommentDto.toDomain(): Comment = Comment(
 )
 
 // Cloud's timestamps carry microsecond precision ("...000000+00:00"), which java.util.Date +
-// Jackson's default StdDateFormat isn't guaranteed to accept — parsed as a plain String instead.
+// Jackson's default StdDateFormat isn't guaranteed to accept - parsed as a plain String instead.
 private fun String.toUtc(): ZonedDateTime =
         OffsetDateTime.parse(this).toZonedDateTime().withZoneSameInstant(ZoneId.of("UTC"))

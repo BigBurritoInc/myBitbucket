@@ -20,7 +20,7 @@ class DemoMode(private val project: Project) {
     fun disable() {
         enabled = false
         project.getService(Model::class.java).updateReviewingPRs(emptyList())
-        // Same guard MainWindow.showConfiguredContent() is gated behind — don't restart polling
+        // Same guard MainWindow.showConfiguredContent() is gated behind - don't restart polling
         // into a project that was never configured.
         if (project.getService(Storer::class.java)!!.settings.isConfigured())
             project.getService(UpdateTaskHolder::class.java).scheduleNew()

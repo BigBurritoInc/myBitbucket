@@ -41,7 +41,7 @@ private fun renderBlock(block: String): String {
 }
 
 // Escapes first, then only builds tags around already-escaped text (no injection). Only
-// *asterisk* emphasis, not _underscore_ — the latter would mangle snake_case identifiers.
+// *asterisk* emphasis, not _underscore_ - the latter would mangle snake_case identifiers.
 private fun renderInline(text: String): String {
     var html = escapeHtml(text)
     html = Regex("""\[([^\[\]]+)]\((https?://[^\s()]+)\)""").replace(html) {

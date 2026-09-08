@@ -1,21 +1,21 @@
 plugins {
     id 'org.jetbrains.kotlin.jvm' version '2.1.20'
-    // Version pinned in settings.gradle, not here — see CLAUDE.md "Build".
+    // Version pinned in settings.gradle, not here - see CLAUDE.md "Build".
     id 'org.jetbrains.intellij.platform'
 }
 
 group 'BigBurritoInc'
-// Bump on every change intended for reinstall (0.7 -> 0.7.1 -> ...) — see CLAUDE.md "Versioning".
-version '0.7.5'
+// Bump on every change intended for reinstall (0.7 -> 0.7.1 -> ...) - see CLAUDE.md "Versioning".
+version '0.6'
 
 dependencies {
     intellijPlatform {
-        // Pinned SDK, not a local IDE install — see CLAUDE.md "Build" for why 2025.2.
+        // Pinned SDK, not a local IDE install - see CLAUDE.md "Build" for why 2025.2.
         create 'IC', '2025.2'
         bundledPlugin 'Git4Idea'
     }
 
-    // Replaces com.palominolabs.http:url-builder (JCenter shutdown) — see http.UrlBuilder.
+    // Replaces com.palominolabs.http:url-builder (JCenter shutdown) - see http.UrlBuilder.
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.2'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2'
 
@@ -23,7 +23,7 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
 }
 
-// Puts the platform SDK on test runtime classpath too, not just compile — required for
+// Puts the platform SDK on test runtime classpath too, not just compile - required for
 // PanelRunner.kt to run standalone. See CLAUDE.md "PanelRunner".
 sourceSets {
     test {
@@ -31,7 +31,7 @@ sourceSets {
     }
 }
 
-// --add-opens for PanelRunner.kt (JDK 17+ module system) — see CLAUDE.md "PanelRunner".
+// --add-opens for PanelRunner.kt (JDK 17+ module system) - see CLAUDE.md "PanelRunner".
 tasks.withType(JavaExec).configureEach {
     jvmArgs += [
             '--add-opens=java.base/java.lang=ALL-UNNAMED',
@@ -73,9 +73,9 @@ intellijPlatform {
             untilBuild = null
         }
         changeNotes = """
-          v0.7.1 myBitbucket now supports Bitbucket Cloud (bitbucket.org), not only Bitbucket
+          v0.6 myBitbucket now supports Bitbucket Cloud (bitbucket.org), not only Bitbucket
           Server <br><br>
-          v0.6.6 Adding a Bitbucket repo now detects it from git and, if possible, your saved git
+          Adding a Bitbucket repo now detects it from git and, if possible, your saved git
           credentials. The old Settings page is gone: use the tool window's "Add Bitbucket repo"
           button, or the gear menu's "Reconfigure Bitbucket repo..." to change it later.<br><br>
           v0.5.7 The Reviewing tab lists pull requests in the order you need to act on them: waiting
@@ -88,7 +88,7 @@ intellijPlatform {
           icons in the pull request list.<br><br>
           Settings now asks for a single "Repository URL" instead of three separate
           fields, with Access Token as the only way to sign in.<br><br>
-          Added a pull request description view — expand a PR to read its full description
+          Added a pull request description view - expand a PR to read its full description
           in place.<br><br>
         """
     }

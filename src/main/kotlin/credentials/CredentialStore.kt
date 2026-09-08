@@ -14,7 +14,7 @@ object CredentialStore {
     private const val SUBSYSTEM = "myBitbucket"
 
     /** [hostAuthority] is host[:port], e.g. "bitbucket.example.com" or
-     * "bitbucket.example.com:7990" — the same value [credentials.GitCredentialHelper] looks
+     * "bitbucket.example.com:7990" - the same value [credentials.GitCredentialHelper] looks
      * secrets up by. */
     fun attributesFor(hostAuthority: String): CredentialAttributes =
             CredentialAttributes(generateServiceName(SUBSYSTEM, hostAuthority))
@@ -34,7 +34,7 @@ object CredentialStore {
         PasswordSafe.instance.set(attributesFor(hostAuthority), null)
     }
 
-    /** Host[:port] for [baseUrl] — the same shape [discovery.DiscoveredRemote.hostAuthority] and
+    /** Host[:port] for [baseUrl] - the same shape [discovery.DiscoveredRemote.hostAuthority] and
      * `GitCredentialHelper` use, so a credential saved from a discovered remote is found again
      * from a persisted `Settings.url`. Null if [baseUrl] doesn't parse as a URI. */
     fun hostAuthorityFor(baseUrl: String): String? {

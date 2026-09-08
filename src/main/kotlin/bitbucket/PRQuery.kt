@@ -11,7 +11,7 @@ import ui.Settings
 import java.net.URL
 
 /** Open pull requests of the configured repository, split by role. A pull request the user both
- * authored and reviews appears in BOTH lists — matching what the two separate role-filtered
+ * authored and reviews appears in BOTH lists - matching what the two separate role-filtered
  * requests used to return. */
 data class RepositoryPRs(val own: List<PR>, val reviewing: List<PR>)
 

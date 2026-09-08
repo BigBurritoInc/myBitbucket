@@ -6,7 +6,7 @@ import domain.ReviewStatus
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
-// Fake pull requests for DemoModeAction — no real server, no real names.
+// Fake pull requests for DemoModeAction - no real server, no real names.
 // docs: Demo mode
 object DemoData {
 

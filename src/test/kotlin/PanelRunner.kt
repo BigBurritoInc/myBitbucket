@@ -15,12 +15,13 @@ object PanelRunner {
 
     val br = "feature/PROJ-1980-it-is-a-feature-that-has-a-workitem-branch"
 
-    // Model is a per-project service and needs a real Project — PanelRunner has neither, so it
+    // Model is a per-project service and needs a real Project - PanelRunner has neither, so it
     // skips PanelFactory.createReviewPanel() and builds its own Panel with a no-op stub instead.
     // docs: PanelRunner
     private val noopActions = object : PRActions {
         override fun checkout(pr: PR) {}
         override fun approve(pr: PR, callback: java.util.function.Consumer<Boolean>) {}
+        override fun unapprove(pr: PR, callback: java.util.function.Consumer<Boolean>) {}
         override fun merge(pr: PR, callback: java.util.function.Consumer<Boolean>) {}
     }
 

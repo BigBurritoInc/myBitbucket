@@ -10,7 +10,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import git4idea.config.GitExecutableManager
 import util.LOG
 
-/** Shells out to `git credential fill` directly — no platform API exists for reading back a
+/** Shells out to `git credential fill` directly - no platform API exists for reading back a
  * credential git itself stores. Only meaningful for http(s); a `null` return means "nothing to
  * reuse", not an error.
  * docs: Basic Auth */
@@ -18,7 +18,7 @@ object GitCredentialHelper {
 
     private const val TIMEOUT_MILLIS = 3_000
 
-    /** Must be called off the EDT — runs and waits on a subprocess. [workingDirectory] should be
+    /** Must be called off the EDT - runs and waits on a subprocess. [workingDirectory] should be
      * a root of the git repository the remote belongs to (git reads its config, including
      * `credential.helper`, relative to the working directory). */
     fun tryFill(project: Project, workingDirectory: VirtualFile, scheme: String, host: String): Credentials? {

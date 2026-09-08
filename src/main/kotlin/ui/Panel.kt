@@ -9,7 +9,7 @@ import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
 
-/** @param attentionOf how much attention each PR still wants — drives display order (whatever
+/** @param attentionOf how much attention each PR still wants - drives display order (whatever
  *  needs doing first, approved last) and the "Show already approved" collapse. The Created list
  *  leaves the default: one bucket, ordered by recency. */
 abstract class Panel(
@@ -19,7 +19,7 @@ abstract class Panel(
         const val GAP_BETWEEN_PR_COMPONENTS = 5
     }
 
-    // Its own model, not read back off the child components — hidden PRs have no component, and
+    // Its own model, not read back off the child components - hidden PRs have no component, and
     // the footer button isn't a PRComponent either. docs: Fetching pull requests
     private val prs: MutableList<PR> = ArrayList()
 
@@ -100,7 +100,7 @@ abstract class Panel(
         forEachPRComponent { it.currentBranchChanged(branchName) }
     }
 
-    // Not every child is a PRComponent — the footer holds the show/hide button.
+    // Not every child is a PRComponent - the footer holds the show/hide button.
     private fun forEachPRComponent(action: (PRComponent) -> Unit) {
         synchronized(treeLock) {
             components.filterIsInstance<PRComponent>().forEach(action)

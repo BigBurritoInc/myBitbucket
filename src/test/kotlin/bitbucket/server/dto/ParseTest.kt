@@ -34,7 +34,7 @@ class ParseTest {
     }
 
     /** Bitbucket omits `nextPageStart` on the last page; PageDto declares it non-null, which is
-     * only safe because replayPageRequest checks isLastPage first — this test pins both. */
+     * only safe because replayPageRequest checks isLastPage first - this test pins both. */
     @Test
     fun testParsePageOfPRs() {
         val page = objMapper.reader().forType(prPageTypeRef)
@@ -44,7 +44,7 @@ class ParseTest {
         assertTrue(page.isLastPage)
     }
 
-    /** The mapping is the only place Server's field names are known — pin the ones that move. */
+    /** The mapping is the only place Server's field names are known - pin the ones that move. */
     @Test
     fun testMapsToDomain() {
         val dto = readPR("pr_sample.json")

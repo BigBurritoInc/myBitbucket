@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectReader
 import org.apache.http.HttpResponse
 import org.apache.http.HttpStatus
 import util.LOG
+import java.io.ByteArrayInputStream
 import java.io.InputStream
 
 class HttpResponseHandler<T>(
@@ -34,18 +35,23 @@ class HttpResponseHandler<T>(
             LOG.debug("HTTP response: $statusCode ${status.reasonPhrase}")
             return when (statusCode) {
                 HttpStatus.SC_OK -> mapper.invoke(response.entity.content)
+                // Bitbucket Cloud's DELETE endpoints (e.g. removing an approval) return 204 with
+                // no body - only reachable by the void handle(response) overload in practice, so
+                // an empty stream is safe; a typed caller expecting a real body would still fail
+                // to parse it, same as before this branch existed. docs: Known incidents
+                HttpStatus.SC_NO_CONTENT -> mapper.invoke(ByteArrayInputStream(ByteArray(0)))
                 HttpStatus.SC_FORBIDDEN -> {
                     // Bitbucket's error body usually names the actual reason (e.g. a missing
-                    // OAuth scope) that a bare "403" doesn't — logged here, the one place both
+                    // OAuth scope) that a bare "403" doesn't - logged here, the one place both
                     // Server and Cloud calls funnel through. docs: Known incidents
                     LOG.warn("BitBucket request forbidden (403): ${readErrorBodySafely(response)}")
                     listener.actionForbidden()
-                    // Don't hand the error body to the body mapper — it isn't the type the caller
+                    // Don't hand the error body to the body mapper - it isn't the type the caller
                     // asked for, and Jackson would throw something unrelated to the real problem.
                     throw ForbiddenException
                 }
                 HttpStatus.SC_UNAUTHORIZED -> {
-                    LOG.warn("BitBucket request unauthorized (401) — check the configured " +
+                    LOG.warn("BitBucket request unauthorized (401) - check the configured " +
                             "credentials/access token: ${readErrorBodySafely(response)}")
                     listener.invalidCredentials()
                     throw UnauthorizedException

@@ -7,7 +7,7 @@ import bitbucket.RepositoryPRs
 import bitbucket.partitionPRs
 import bitbucket.pullRequestsUrl
 import bitbucket.server.dto.ActivityDto
-import bitbucket.server.dto.ApproveRequestDto
+import bitbucket.server.dto.ParticipantStatusRequestDto
 import bitbucket.server.dto.MergeStatusDto
 import bitbucket.server.dto.PageDto
 import bitbucket.server.dto.PullRequestDto
@@ -30,7 +30,7 @@ import ui.Settings
 import util.LOG
 import java.net.URL
 
-/** Server/Data Center implementation of [BitbucketClient] — the only class that sees both DTO and
+/** Server/Data Center implementation of [BitbucketClient] - the only class that sees both DTO and
  * domain types.
  * docs: Domain model vs wire format */
 class BitbucketServerClient(
@@ -43,7 +43,7 @@ class BitbucketServerClient(
         private val listener: ClientListener
     ) : BitbucketClient {
     companion object {
-        // Asking for a size makes Bitbucket add avatarUrl to every User it returns — see
+        // Asking for a size makes Bitbucket add avatarUrl to every User it returns - see
         // UserDto.avatarHref().
         private const val AVATAR_SIZE = 64
         // Bitbucket's own default is 25; 100 makes one page cover most repos' whole poll.
@@ -59,7 +59,7 @@ class BitbucketServerClient(
     private val activitiesPagedResponseHandler = HttpResponseHandler(
             objReader, object : TypeReference<PageDto<ActivityDto>>() {}, listener)
 
-    // One probe per client instance — recreated each reschedule, so this doesn't need to reset itself.
+    // One probe per client instance - recreated each reschedule, so this doesn't need to reset itself.
     @Volatile
     private var probedForCurrentUser = false
 
@@ -79,7 +79,7 @@ class BitbucketServerClient(
         } catch (e: HttpResponseHandler.NotFoundException) {
             LOG.warn(e)
             listener.repositoryNotFound("Repository ${settings.project}/${settings.slug} was not found " +
-                    "on ${settings.url} — check the repository URL in myBitbucket settings.")
+                    "on ${settings.url} - check the repository URL in myBitbucket settings.")
             null
         } catch (e: HttpResponseHandler.UnauthorizedException) {
             // Deliberately not swallowed: UpdateTask stops polling on this rather than retrying
@@ -91,10 +91,10 @@ class BitbucketServerClient(
         }
     }
 
-    /** Mapped to the domain here, at the edge — nothing above this sees Server's wire format. */
+    /** Mapped to the domain here, at the edge - nothing above this sees Server's wire format. */
     private fun fetchOpenPRs(): List<PR> = fetchPage(0, PAGE_SIZE).map { it.toDomain() }
 
-    /** One page, then the rest via paging replay. [limit] must travel through that replay — omit
+    /** One page, then the rest via paging replay. [limit] must travel through that replay - omit
      * it and every page after the first silently falls back to Bitbucket's default of 25 instead
      * of PAGE_SIZE. */
     private fun fetchPage(start: Int, limit: Int): List<PullRequestDto> {
@@ -103,7 +103,7 @@ class BitbucketServerClient(
         return replayPageRequest(httpRequestFactory.createGet(url)) { fetchPage(it, limit) }
     }
 
-    /** The username the credentials belong to — normally already known via `X-AUSERNAME` on the
+    /** The username the credentials belong to - normally already known via `X-AUSERNAME` on the
      * pull request response.
      * docs: Current user */
     private fun currentUserName(): String? =
@@ -134,18 +134,29 @@ class BitbucketServerClient(
     // Reuses openPRs()'s own resolution, no extra request. docs: Inbox
     override fun currentUserIdentifier(): String? = currentUserName()
 
-    override fun approve(pr: PR) {
+    override fun approve(pr: PR) = setOwnParticipantStatus(pr, approved = true)
+
+    /** Withdraws the current user's own approval. Same endpoint as [approve] - PUT .../participants/{userSlug}
+     * is the documented way to change *either* direction of the current user's own status, and it
+     * leaves the user as a participant/reviewer rather than removing them (unlike the deprecated
+     * DELETE .../participants/{userSlug}, which drops the participant entirely).
+     * docs: Known incidents */
+    override fun unapprove(pr: PR) = setOwnParticipantStatus(pr, approved = false)
+
+    private fun setOwnParticipantStatus(pr: PR, approved: Boolean) {
         val user = currentUserName()
         if (user == null) {
             listener.currentUserUnknown()
-            throw IllegalStateException("Cannot approve: the current Bitbucket user is unknown")
+            throw IllegalStateException("Cannot change approval: the current Bitbucket user is unknown")
         }
         try {
             val urlBuilder = urlBuilder().pathSegments(
                     "projects", settings.project, "repos", settings.slug, "pull-requests", pr.id.toString(), "participants", user)
-            LOG.debug("Approving PR ${pr.id}: PUT ${urlBuilder.toUrlString()}")
+            val status = if (approved) "APPROVED" else "UNAPPROVED"
+            LOG.debug("Setting PR ${pr.id} participant status to $status: PUT ${urlBuilder.toUrlString()}")
             val request = httpRequestFactory.createPut(urlBuilder.toUrlString())
-            val body = objWriter.writeValueAsBytes(ApproveRequestDto(SimpleUserDto(user)))
+            val body = objWriter.writeValueAsBytes(
+                    ParticipantStatusRequestDto(SimpleUserDto(user), status, approved.toString()))
             val entity = ByteArrayEntity(body)
             request.entity = entity
             HttpResponseHandler.handle(httpClient.execute(request))
@@ -174,7 +185,7 @@ class BitbucketServerClient(
             sendRequest(request, mergeStatusResponseHandler).toDomain()
         } catch (e: Exception) {
             listener.requestFailed(e)
-            // known=true, not UNKNOWN — the request happened; MergeStatusCache treats this like
+            // known=true, not UNKNOWN - the request happened; MergeStatusCache treats this like
             // any answer until the PR changes.
             MergeStatus(canMerge = false, conflicted = false,
                     vetoes = listOf(Veto("Could not read the merge status", "")), known = true)
@@ -207,7 +218,7 @@ class BitbucketServerClient(
         return prs
     }
 
-    // Not the plain "comments" endpoint — that's file/line comment search on Server, not this.
+    // Not the plain "comments" endpoint - that's file/line comment search on Server, not this.
     // docs: Inbox, Known incidents
     override fun fetchComments(pr: PR, sinceCommentId: Long?): List<Comment> {
         return try {

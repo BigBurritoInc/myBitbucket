@@ -5,7 +5,7 @@ interface ClientListener {
     fun actionForbidden() {}
     fun requestFailed(e: Exception) {}
 
-    /** Configured project/repository doesn't exist on the server, or the token can't see it —
+    /** Configured project/repository doesn't exist on the server, or the token can't see it -
      * separate from [requestFailed] since that logs at ERROR and counts toward the poll-stopping
      * error budget. */
     fun repositoryNotFound(message: String) {}

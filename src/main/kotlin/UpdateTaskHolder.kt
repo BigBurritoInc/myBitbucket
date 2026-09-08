@@ -30,7 +30,7 @@ class UpdateTaskHolder(private val project: Project) {
     companion object {
         const val MIN_DELAY_SECONDS = 15L
         const val MAX_DELAY_SECONDS = 120L
-        // Inbox tab is implemented but disabled — its UX needs a rework before it ships to users.
+        // Inbox tab is implemented but disabled - its UX needs a rework before it ships to users.
         // Flip this back on once that's done; don't delete the feature code. docs: Inbox
         const val INBOX_FEATURE_ENABLED = false
     }
@@ -38,7 +38,7 @@ class UpdateTaskHolder(private val project: Project) {
     private val lock = Any()
     var task: CancellableTask = DummyTask()
 
-    // Dispatches off-thread (blocking PasswordSafe read) — makes stop() racy against a pending
+    // Dispatches off-thread (blocking PasswordSafe read) - makes stop() racy against a pending
     // schedule. docs: Basic Auth
     fun reschedule() {
         AppExecutorUtil.getAppScheduledExecutorService().execute {
@@ -67,7 +67,7 @@ class UpdateTaskHolder(private val project: Project) {
             project.getService(CurrentUser::class.java).clear()
             val client = BitbucketClientFactory.createClient(project, NotifyingClientListener())
             task = factory.invoke(client)
-            // One-shot, not scheduleWithFixedDelay — UpdateTask re-arms itself with a delay based
+            // One-shot, not scheduleWithFixedDelay - UpdateTask re-arms itself with a delay based
             // on the last cycle.
             task.setFuture(AppExecutorUtil.getAppScheduledExecutorService().schedule(task, 0, TimeUnit.SECONDS))
         }
@@ -119,7 +119,7 @@ class UpdateTaskHolder(private val project: Project) {
                 LOG.debug("Running UpdateTask...")
                 val prs = client.openPRs()
                 if (prs == null) {
-                    // Not "no pull requests" — leave lists alone rather than report every PR as
+                    // Not "no pull requests" - leave lists alone rather than report every PR as
                     // new next cycle. docs: Known incidents
                     LOG.warn("UpdateTask: skipping this cycle, pull requests could not be fetched")
                     recordCycle(changed = false)
@@ -166,7 +166,7 @@ class UpdateTaskHolder(private val project: Project) {
 
         override fun cancel() {
             synchronized(lock) {
-                // Set before cancelling the future — run() may already be executing on another
+                // Set before cancelling the future - run() may already be executing on another
                 // thread and would otherwise re-arm itself.
                 cancelled = true
                 taskFuture?.cancel(true)
@@ -192,7 +192,7 @@ class UpdateTaskHolder(private val project: Project) {
     // inner: cancels the enclosing UpdateTaskHolder's own task after too many consecutive errors.
     inner class NotifyingClientListener: ClientListener {
         private val errorCounter: AtomicInteger = AtomicInteger(0)
-        // Configuration problems, not transient failures — they'd otherwise repeat every 15s
+        // Configuration problems, not transient failures - they'd otherwise repeat every 15s
         // until Settings is fixed, which replaces this listener anyway.
         private val notFoundReported = AtomicBoolean(false)
         private val unknownUserReported = AtomicBoolean(false)
@@ -219,7 +219,11 @@ class UpdateTaskHolder(private val project: Project) {
         }
 
         override fun requestFailed(e: Exception) {
-            LOG.error("Request failed", e)
+            // LOG.warn, not LOG.error: a connect timeout/DNS failure/handshake failure is an
+            // expected, actionable network condition (wrong URL, host unreachable, VPN off), not
+            // a plugin bug - LOG.error makes the IDE raise its own "internal error" report for it,
+            // repeating every poll cycle until the host is reachable again. docs: Known incidents
+            LOG.warn("Request failed", e)
             val message = when (e) {
                 is UnknownHostException -> "BitBucket host can't be reached. Check url settings."
                 is SSLHandshakeException -> "SSL handshake with BitBucket server failed. Details: " + e.message

@@ -1,0 +1,28 @@
+{
+    "id": 44,
+    "title": "A PR with participants explicitly null",
+    "author": {
+        "uuid": "{author-uuid}",
+        "display_name": "Dima"
+    },
+    "state": "OPEN",
+    "source": {
+        "branch": {
+            "name": "feature/null-participants"
+        }
+    },
+    "destination": {
+        "branch": {
+            "name": "main"
+        }
+    },
+    "participants": null,
+    "created_on": "2026-09-02T10:00:00.000000+00:00",
+    "updated_on": "2026-09-02T10:00:00.000000+00:00",
+    "comment_count": 0,
+    "links": {
+        "html": {
+            "href": "https://bitbucket.org/example-user/example-repo/pull-requests/44"
+        }
+    }
+}

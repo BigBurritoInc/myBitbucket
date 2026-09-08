@@ -20,7 +20,7 @@ data class InboxState(
 
 @State(name = "BitbucketHelper4IdeaInbox", storages = [Storage(StoragePathMacros.WORKSPACE_FILE)])
 class InboxStore : PersistentStateComponent<InboxState> {
-    // Not "state" — docs: Known incidents
+    // Not "state" - docs: Known incidents
     var inboxState = InboxState()
 
     override fun getState(): InboxState = inboxState

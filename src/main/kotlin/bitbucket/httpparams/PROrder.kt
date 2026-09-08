@@ -3,7 +3,7 @@ package bitbucket.httpparams
 import http.UrlBuilder
 
 enum class PROrder(private val paramValue: String): HttpRequestParameter {
-    // Uppercase: same reasoning as PRState — Bitbucket Server normalises case, Bitbucket Cloud
+    // Uppercase: same reasoning as PRState - Bitbucket Server normalises case, Bitbucket Cloud
     // does not, and this endpoint is Server-only.
     NEWEST("NEWEST"),
     OLDEST("OLDEST"),

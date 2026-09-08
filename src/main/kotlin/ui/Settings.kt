@@ -6,12 +6,12 @@ import com.intellij.openapi.components.Storage
 import com.intellij.openapi.components.StoragePathMacros
 import com.intellij.util.xmlb.XmlSerializerUtil
 
-/** The one Bitbucket repository bound to this IDE project; no secret — see CredentialStore.
+/** The one Bitbucket repository bound to this IDE project; no secret - see CredentialStore.
  * docs: Basic Auth */
 data class Settings(var project: String = "", var slug: String = "", var login: String = "",
                      var url: String = "", var useAccessTokenAuth: Boolean = true,
                      var cloud: Boolean = false,
-                     // Legacy field for the one-time pre-0.6 migration only — do not read/write
+                     // Legacy field for the one-time pre-0.6 migration only - do not read/write
                      // it elsewhere. docs: Basic Auth
                      var accessToken: String = "",
                      var inboxNotificationsEnabled: Boolean = false) {
@@ -24,7 +24,7 @@ data class Settings(var project: String = "", var slug: String = "", var login: 
         useAccessTokenAuth = other.useAccessTokenAuth
         cloud = other.cloud
         inboxNotificationsEnabled = other.inboxNotificationsEnabled
-        // accessToken deliberately NOT copied here — see its own doc comment above.
+        // accessToken deliberately NOT copied here - see its own doc comment above.
     }
 
     fun isConfigured(): Boolean = url.isNotBlank() && project.isNotBlank() && slug.isNotBlank()
@@ -50,7 +50,7 @@ const val CLOUD_BASE_URL = "https://$CLOUD_HOST"
 private val REPOSITORY_URL_PATTERN =
         Regex("""(https?://[^\s\[\]()]+?)/projects/([^/\s\[\]()]+)/repos/([^/\s\[\]()]+)""")
 
-// bitbucket.org/{workspace}/{repo_slug} anywhere in the pasted text — same reasoning as above,
+// bitbucket.org/{workspace}/{repo_slug} anywhere in the pasted text - same reasoning as above,
 // minus the Server-only /projects/.../repos/... infix Cloud URLs don't have.
 private val CLOUD_REPOSITORY_URL_PATTERN =
         Regex("""https?://bitbucket\.org/([^/\s\[\]()]+)/([^/\s\[\]()]+)""", RegexOption.IGNORE_CASE)
@@ -63,7 +63,7 @@ fun parseRepositoryUrl(text: String): Triple<String, String, String>? {
     return Triple(baseUrl, project, slug)
 }
 
-/** One repository reference parsed from pasted text, flavour included — same shape
+/** One repository reference parsed from pasted text, flavour included - same shape
  * `discovery.DiscoveredRemote` produces, so a pasted URL and a discovered git remote are
  * indistinguishable to `ui.AddProjectDialog`. */
 data class ParsedRepositoryUrl(val baseUrl: String, val project: String, val slug: String, val cloud: Boolean)
