@@ -465,11 +465,19 @@ Two things to know before touching this:
 
 - Comparison must be case-insensitive. `X-AUSERNAME` echoes the server's stored casing, which on
   LDAP-backed instances need not match the casing inside pull request payloads. Use `sameUserAs`.
+- `X-AUSERNAME` is **percent-encoded** (`john%40corp.com`); pull request payloads aren't
+  (`john@corp.com`). `CurrentUser.captureFrom` decodes it (`decodeUserName`, `%XX` only - a literal
+  `+` stays `+`). Storing it raw made every comparison fail for email-style logins: PRs fetched, but
+  "0 own, 0 reviewing" (GitHub issue #77).
 - The approve endpoint's last path segment is a user **slug**, while the header carries a user
-  **name**. They are the same string on most instances but not all (Bitbucket slugifies names with
-  `@` or `.`). `User.slug` is present in Bitbucket's JSON but not mapped onto `User` - if approve
-  starts 404ing for someone with an email-style username, that's the reason, and mapping `slug` as a
-  trailing defaulted constructor param is the fix.
+  **name**. They differ for names with `@` and similar (`john@corp.com` -> `john_corp.com`).
+  `BitbucketServerClient.currentUserSlug` resolves it with one `GET /rest/api/1.0/users?filter=<name>`,
+  picks the entry whose `name` matches exactly (the filter prefix-matches name/email/display name, so
+  `values[0]` is not safe), and caches it in `CurrentUser` keyed by the name - per project, not per
+  client, because `Model` builds a fresh client for every approve. Any lookup failure (e.g. a
+  repo-scoped access token not allowed to browse users) falls back to the name, which is the slug on
+  most instances. Not taken from the PR's own reviewer entry: approving a PR you aren't a participant
+  of yet has none.
 
 ## Inbox
 

@@ -117,6 +117,10 @@ data class ParticipantStatusRequestDto(@JsonProperty("user") val user: SimpleUse
 
 data class SimpleUserDto(@JsonProperty("name") val name: String)
 
+/** One entry of GET /rest/api/1.0/users - only what resolving the current user's slug needs. */
+data class UserSlugDto(@JsonProperty("name") val name: String,
+                       @JsonProperty("slug") val slug: String)
+
 /** GET .../pull-requests/{id}/activities - the real general-comment feed (not "comments"). Only
  * [comment] matters here; other activity types (APPROVED, MERGED, RESCOPED, ...) are ignored.
  * docs: Inbox */

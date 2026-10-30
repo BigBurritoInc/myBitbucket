@@ -6,12 +6,14 @@ import bitbucket.CurrentUser
 import bitbucket.RepositoryPRs
 import bitbucket.partitionPRs
 import bitbucket.pullRequestsUrl
+import bitbucket.sameUserAs
 import bitbucket.server.dto.ActivityDto
 import bitbucket.server.dto.ParticipantStatusRequestDto
 import bitbucket.server.dto.MergeStatusDto
 import bitbucket.server.dto.PageDto
 import bitbucket.server.dto.PullRequestDto
 import bitbucket.server.dto.SimpleUserDto
+import bitbucket.server.dto.UserSlugDto
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectReader
 import com.fasterxml.jackson.databind.ObjectWriter
@@ -58,6 +60,9 @@ class BitbucketServerClient(
             objReader, object : TypeReference<PullRequestDto>() {}, listener)
     private val activitiesPagedResponseHandler = HttpResponseHandler(
             objReader, object : TypeReference<PageDto<ActivityDto>>() {}, listener)
+    // Own no-op listener: a failed lookup falls back to the name silently, it isn't a user-facing error.
+    private val usersPagedResponseHandler = HttpResponseHandler(
+            objReader, object : TypeReference<PageDto<UserSlugDto>>() {}, object : ClientListener {})
 
     // One probe per client instance - recreated each reschedule, so this doesn't need to reset itself.
     @Volatile
@@ -151,7 +156,8 @@ class BitbucketServerClient(
         }
         try {
             val urlBuilder = urlBuilder().pathSegments(
-                    "projects", settings.project, "repos", settings.slug, "pull-requests", pr.id.toString(), "participants", user)
+                    "projects", settings.project, "repos", settings.slug, "pull-requests", pr.id.toString(),
+                    "participants", currentUserSlug(user))
             val status = if (approved) "APPROVED" else "UNAPPROVED"
             LOG.debug("Setting PR ${pr.id} participant status to $status: PUT ${urlBuilder.toUrlString()}")
             val request = httpRequestFactory.createPut(urlBuilder.toUrlString())
@@ -164,6 +170,29 @@ class BitbucketServerClient(
             listener.requestFailed(e)
             throw e
         }
+    }
+
+    /** The participants endpoint wants a slug, which differs from the name for names with special symbols like `@`.
+     * Falls back to the name, which is the slug on most instances.
+     * docs: Current user */
+    private fun currentUserSlug(name: String): String {
+        currentUser.slugFor(name)?.let { return it }
+        val slug = try {
+            lookUpSlug(name)
+        } catch (e: Exception) {
+            LOG.debug("Slug lookup for $name failed, using the name instead", e)
+            null
+        } ?: return name
+        currentUser.rememberSlug(name, slug)
+        return slug
+    }
+
+    // `filter` prefix-matches name, email and display name, so the exact name match is picked.
+    private fun lookUpSlug(name: String): String? {
+        val url = urlBuilder().pathSegments("users").queryParam("filter", name).toUrlString()
+        LOG.debug("Resolving the current user's slug: $url")
+        return sendRequest(httpRequestFactory.createGet(url), usersPagedResponseHandler)
+                .values.firstOrNull { it.name.sameUserAs(name) }?.slug
     }
 
     override fun merge(pr: PR): PR {

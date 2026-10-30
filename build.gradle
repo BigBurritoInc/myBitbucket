@@ -6,7 +6,7 @@ plugins {
 
 group 'BigBurritoInc'
 // Bump on every change intended for reinstall (0.7 -> 0.7.1 -> ...) - see CLAUDE.md "Versioning".
-version '0.6'
+version '0.6.1'
 
 dependencies {
     intellijPlatform {
@@ -73,6 +73,7 @@ intellijPlatform {
             untilBuild = null
         }
         changeNotes = """
+          v0.6.1 fixed a retrieval issue for accounts whose login is an email address.<br><br>
           v0.6 myBitbucket now supports Bitbucket Cloud (bitbucket.org), not only Bitbucket
           Server <br><br>
           Adding a Bitbucket repo now detects it from git and, if possible, your saved git

@@ -23,7 +23,10 @@ The plugin performs remote http requests to Bitbucket Server, if your Bitbucket 
 The plugin targets IntelliJ IDEA 2023.3 and newer, and is expected to work with the current version of Bitbucket Cloud or any Bitbucket Server that implements Bitbucket Server REST API 1.0. Was tested using IDEA 2026.2.
 
 ## Reporting an issue
-If you find any issue, please report it to [GitHub](https://github.com/BigBurritoInc/BitbucketHelper4Idea/issues) or [email us](mailto:bitbucket.plugin@gmail.com)
+If you find any issue, please report it to [GitHub](https://github.com/BigBurritoInc/BitbucketHelper4Idea/issues)
+
+Attaching debug log to the issue can help us find the root cause: 
+To do so add `#myBitbucket:debug` under _Help > Diagnostic Tools > Debug Log Settings_, reproduce the problem, then attach the relevant part of `idea.log` (_Help > Show Log in Finder/Explorer_).
 
 [plugin-repo]: https://plugins.jetbrains.com/plugin/11577-mybitbucket
 [plugin-downloads-svg]: http://img.shields.io/jetbrains/plugin/d/11577
